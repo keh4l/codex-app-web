@@ -1,0 +1,2 @@
+import{i as e}from"./lib-C9ARfkq0.js";import{J as t,S as n}from"./vscode-api-DH_DWhkY.js";var r=t(n,`hidden`),i=e(`has-seen-remote-connections-home-announcement`,!1);export{r as n,i as t};
+//# sourceMappingURL=remote-connections-onboarding-signals-Dv20Bxl6.js.map

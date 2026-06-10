@@ -1,0 +1,2 @@
+import{J as e,S as t,U as n}from"./vscode-api-DH_DWhkY.js";var r=e(t,!1),i=e(t,!1),a=e(t,!1),o=e(t,!1),s=n(t,({get:e})=>e(a)||e(i));function c(e){e.set(r,!1),e.set(i,!1),e.set(a,!1),e.set(o,!1)}function l(e,{altKey:t,ctrlKey:n,metaKey:s,shiftKey:c}){e.set(r,t),e.set(i,n),e.set(a,s),e.set(o,c)}export{l as a,a as i,r as n,s as r,c as t};
+//# sourceMappingURL=keyboard-modifier-state-9dYaLZWF.js.map

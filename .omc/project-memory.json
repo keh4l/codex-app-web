@@ -1,0 +1,194 @@
+{
+  "version": "1.0.0",
+  "lastScanned": 1781017656867,
+  "projectRoot": "/Users/keh4l/Documents/Github/codex-web",
+  "techStack": {
+    "languages": [
+      {
+        "name": "JavaScript/TypeScript",
+        "version": null,
+        "confidence": "high",
+        "markers": [
+          "package.json"
+        ]
+      }
+    ],
+    "frameworks": [
+      {
+        "name": "fastify",
+        "version": "5.8.5",
+        "category": "backend"
+      },
+      {
+        "name": "react",
+        "version": "19.2.0",
+        "category": "frontend"
+      },
+      {
+        "name": "react-dom",
+        "version": "19.2.0",
+        "category": "frontend"
+      },
+      {
+        "name": "vite",
+        "version": "8.0.8",
+        "category": "build"
+      }
+    ],
+    "packageManager": "npm",
+    "runtime": null
+  },
+  "build": {
+    "buildCommand": "npm run build",
+    "testCommand": null,
+    "lintCommand": null,
+    "devCommand": null,
+    "scripts": {
+      "prepare": "./scripts/prepare && npm run build:browser && npm run build:server",
+      "build": "npm run prepare:asar && npm run build:browser && npm run build:server",
+      "launch:unpacked:server": "http-server ./scratch/asar/webview -a localhost -p 5175 -c-1",
+      "launch:unpacked": "NODE_ENV=development electron ./scratch/asar --remote-debugging-port=9222",
+      "dev:browser": "vite --config vite.browser.config.ts",
+      "build:browser": "vite build --config vite.browser.config.ts",
+      "build:server": "cd src/server && tsc",
+      "prepare:asar": "./scripts/prepare_asar",
+      "preserver": "npm run build:server && npm run build:browser",
+      "server": "CODEX_CLI_PATH=$(which codex) node src/server/main.js"
+    }
+  },
+  "conventions": {
+    "namingStyle": null,
+    "importStyle": null,
+    "testPattern": null,
+    "fileOrganization": null
+  },
+  "structure": {
+    "isMonorepo": false,
+    "workspaces": [],
+    "mainDirectories": [
+      "assets",
+      "scripts",
+      "src"
+    ],
+    "gitBranches": {
+      "defaultBranch": "main",
+      "branchingStrategy": null
+    }
+  },
+  "customNotes": [],
+  "directoryMap": {
+    "assets": {
+      "path": "assets",
+      "purpose": "Static assets",
+      "fileCount": 2,
+      "lastAccessed": 1781017656849,
+      "keyFiles": [
+        "favicon.svg",
+        "manifest.json"
+      ]
+    },
+    "nix": {
+      "path": "nix",
+      "purpose": null,
+      "fileCount": 1,
+      "lastAccessed": 1781017656849,
+      "keyFiles": [
+        "fmt.nix"
+      ]
+    },
+    "patches": {
+      "path": "patches",
+      "purpose": null,
+      "fileCount": 14,
+      "lastAccessed": 1781017656854,
+      "keyFiles": [
+        "sentry-disable-shell.patch",
+        "sentry-disable-webview.patch",
+        "webview-electron-shim-close-sidebar.patch",
+        "webview-favicon.patch",
+        "webview-initial-route.patch"
+      ]
+    },
+    "scripts": {
+      "path": "scripts",
+      "purpose": "Build/utility scripts",
+      "fileCount": 3,
+      "lastAccessed": 1781017656855,
+      "keyFiles": [
+        "codex_remote_proxy",
+        "prepare",
+        "prepare_asar"
+      ]
+    },
+    "src": {
+      "path": "src",
+      "purpose": "Source code",
+      "fileCount": 0,
+      "lastAccessed": 1781017656855,
+      "keyFiles": []
+    }
+  },
+  "hotPaths": [
+    {
+      "path": "_bmad/config.toml",
+      "accessCount": 2,
+      "lastAccessed": 1781021367496,
+      "type": "file"
+    },
+    {
+      "path": "_bmad/custom/config.toml",
+      "accessCount": 2,
+      "lastAccessed": 1781021526684,
+      "type": "file"
+    },
+    {
+      "path": ".serena/project.yml",
+      "accessCount": 1,
+      "lastAccessed": 1781019834482,
+      "type": "file"
+    },
+    {
+      "path": ".serena/project.local.yml",
+      "accessCount": 1,
+      "lastAccessed": 1781019835906,
+      "type": "file"
+    },
+    {
+      "path": "assets/favicon.svg",
+      "accessCount": 1,
+      "lastAccessed": 1781020644030,
+      "type": "file"
+    },
+    {
+      "path": "README.md",
+      "accessCount": 1,
+      "lastAccessed": 1781020653580,
+      "type": "file"
+    },
+    {
+      "path": "ARCHITECTURE.md",
+      "accessCount": 1,
+      "lastAccessed": 1781020653637,
+      "type": "file"
+    },
+    {
+      "path": "UPGRADING.md",
+      "accessCount": 1,
+      "lastAccessed": 1781020653729,
+      "type": "file"
+    },
+    {
+      "path": "graphify-out/.graphify_chunk_02.json",
+      "accessCount": 1,
+      "lastAccessed": 1781020666754,
+      "type": "file"
+    },
+    {
+      "path": "graphify-out/.graphify_chunk_01.json",
+      "accessCount": 1,
+      "lastAccessed": 1781020738501,
+      "type": "file"
+    }
+  ],
+  "userDirectives": []
+}

@@ -1,0 +1,2 @@
+import{H as e,S as t,a as n,c as r,pt as i}from"./vscode-api-DH_DWhkY.js";var a=n(t,`os-info`,{staleTime:r.INFINITE}),o=i();function s(){let t=(0,o.c)(3),n=e(a),r;return t[0]!==n.data||t[1]!==n.isLoading?(r={data:n.data,isLoading:n.isLoading},t[0]=n.data,t[1]=n.isLoading,t[2]=r):r=t[2],r}export{a as n,s as t};
+//# sourceMappingURL=use-os-info-Bxt1d3SB.js.map

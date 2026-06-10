@@ -1,0 +1,117 @@
+{
+  "/Users/keh4l/Documents/Github/codex-web/assets/manifest.json": {
+    "mtime": 1781017624.6973014,
+    "ast_hash": "1a24c224ecee72dc2e5ba967e960dabd",
+    "semantic_hash": "1a24c224ecee72dc2e5ba967e960dabd"
+  },
+  "/Users/keh4l/Documents/Github/codex-web/package.json": {
+    "mtime": 1781017624.6988902,
+    "ast_hash": "e00f85d4510a8e83e0580318b8181e08",
+    "semantic_hash": "e00f85d4510a8e83e0580318b8181e08"
+  },
+  "/Users/keh4l/Documents/Github/codex-web/scripts/codex_remote_proxy": {
+    "mtime": 1781017624.70079,
+    "ast_hash": "168a274c25719adae04a57aa80fd6f9c",
+    "semantic_hash": "168a274c25719adae04a57aa80fd6f9c"
+  },
+  "/Users/keh4l/Documents/Github/codex-web/scripts/fetch_updates/fetch_updates.py": {
+    "mtime": 1781017624.701064,
+    "ast_hash": "cdf2120e5883a1fe97079aca28e580b2",
+    "semantic_hash": "cdf2120e5883a1fe97079aca28e580b2"
+  },
+  "/Users/keh4l/Documents/Github/codex-web/scripts/prepare": {
+    "mtime": 1781017624.701579,
+    "ast_hash": "a4e4249a0845f5b3c85cfe27b816b010",
+    "semantic_hash": "a4e4249a0845f5b3c85cfe27b816b010"
+  },
+  "/Users/keh4l/Documents/Github/codex-web/scripts/prepare_asar": {
+    "mtime": 1781017624.7016854,
+    "ast_hash": "8163582831ad570cc455388aeeabbae0",
+    "semantic_hash": "8163582831ad570cc455388aeeabbae0"
+  },
+  "/Users/keh4l/Documents/Github/codex-web/src/browser/files.ts": {
+    "mtime": 1781017624.7020788,
+    "ast_hash": "f71cb412e8710065085f71c5ce774eee",
+    "semantic_hash": "f71cb412e8710065085f71c5ce774eee"
+  },
+  "/Users/keh4l/Documents/Github/codex-web/src/browser/icons/CloseIcon.tsx": {
+    "mtime": 1781017624.7022638,
+    "ast_hash": "a6a41317cd13ba45ab66b31d42e23378",
+    "semantic_hash": "a6a41317cd13ba45ab66b31d42e23378"
+  },
+  "/Users/keh4l/Documents/Github/codex-web/src/browser/icons/FolderIcon.tsx": {
+    "mtime": 1781017624.7023678,
+    "ast_hash": "5ba43d769e43696bed8aa46e7ff91d02",
+    "semantic_hash": "5ba43d769e43696bed8aa46e7ff91d02"
+  },
+  "/Users/keh4l/Documents/Github/codex-web/src/browser/icons/UpIcon.tsx": {
+    "mtime": 1781017624.702464,
+    "ast_hash": "df19701c59458a7231b848961dfb06f3",
+    "semantic_hash": "df19701c59458a7231b848961dfb06f3"
+  },
+  "/Users/keh4l/Documents/Github/codex-web/src/browser/icons/index.ts": {
+    "mtime": 1781017624.702558,
+    "ast_hash": "b9ade5aa70adc1997b0dcee9dd1b6cd2",
+    "semantic_hash": "b9ade5aa70adc1997b0dcee9dd1b6cd2"
+  },
+  "/Users/keh4l/Documents/Github/codex-web/src/browser/routes.ts": {
+    "mtime": 1781017624.7026675,
+    "ast_hash": "a85bd60ade44130d9b20b96f6f1178cf",
+    "semantic_hash": "a85bd60ade44130d9b20b96f6f1178cf"
+  },
+  "/Users/keh4l/Documents/Github/codex-web/src/browser/shim.ts": {
+    "mtime": 1781017624.7028327,
+    "ast_hash": "6842ea592819d056c49a1e19bf60bf9c",
+    "semantic_hash": "6842ea592819d056c49a1e19bf60bf9c"
+  },
+  "/Users/keh4l/Documents/Github/codex-web/src/browser/workspace-root-dialog.tsx": {
+    "mtime": 1781017624.7029557,
+    "ast_hash": "20f215e73cb011f62e984ff14026094d",
+    "semantic_hash": "20f215e73cb011f62e984ff14026094d"
+  },
+  "/Users/keh4l/Documents/Github/codex-web/src/server/electron/index.ts": {
+    "mtime": 1781017624.7032661,
+    "ast_hash": "0c54946452d29b318382de0b838b9f5a",
+    "semantic_hash": "0c54946452d29b318382de0b838b9f5a"
+  },
+  "/Users/keh4l/Documents/Github/codex-web/src/server/main.ts": {
+    "mtime": 1781017624.7034564,
+    "ast_hash": "46746e8235213a0e14ab253f1d202f48",
+    "semantic_hash": "46746e8235213a0e14ab253f1d202f48"
+  },
+  "/Users/keh4l/Documents/Github/codex-web/src/server/module.ts": {
+    "mtime": 1781017624.7036064,
+    "ast_hash": "c8cdeb9ba3773f56df1ce6929a9a10d5",
+    "semantic_hash": "c8cdeb9ba3773f56df1ce6929a9a10d5"
+  },
+  "/Users/keh4l/Documents/Github/codex-web/src/server/tsconfig.json": {
+    "mtime": 1781017624.7037218,
+    "ast_hash": "75001904d4c3d08c6c6110188aea8cae",
+    "semantic_hash": "75001904d4c3d08c6c6110188aea8cae"
+  },
+  "/Users/keh4l/Documents/Github/codex-web/vite.browser.config.ts": {
+    "mtime": 1781017624.703864,
+    "ast_hash": "31c18fca87c784396eb60a6dc030d8b0",
+    "semantic_hash": "31c18fca87c784396eb60a6dc030d8b0"
+  },
+  "/Users/keh4l/Documents/Github/codex-web/ARCHITECTURE.md": {
+    "mtime": 1781017624.6963902,
+    "ast_hash": "1616ef4203153f9235ae1d568dd38393",
+    "semantic_hash": "1616ef4203153f9235ae1d568dd38393"
+  },
+  "/Users/keh4l/Documents/Github/codex-web/README.md": {
+    "mtime": 1781017624.696714,
+    "ast_hash": "c0cea8b1bc6c71fa585751e657dd1b19",
+    "semantic_hash": "c0cea8b1bc6c71fa585751e657dd1b19"
+  },
+  "/Users/keh4l/Documents/Github/codex-web/UPGRADING.md": {
+    "mtime": 1781017624.6969335,
+    "ast_hash": "1c3afa14928ca410148652e58fcf3ab2",
+    "semantic_hash": "1c3afa14928ca410148652e58fcf3ab2"
+  },
+  "/Users/keh4l/Documents/Github/codex-web/assets/favicon.svg": {
+    "mtime": 1781017624.6971765,
+    "ast_hash": "060b0b77c63d3983225dccd5a9dfabea",
+    "semantic_hash": "060b0b77c63d3983225dccd5a9dfabea"
+  }
+}

@@ -12,6 +12,18 @@ import fastifyStatic from "@fastify/static";
 import { installModuleAliasHook } from "./module";
 import { glob } from "glob";
 
+// Best-effort load of a project-root .env so `node src/server/main.js` also
+// picks up CODEX_CLI_PATH / HOST / PORT. Startup-time vars (NODE_USE_ENV_PROXY,
+// HTTP(S)_PROXY) are read by node during bootstrap, before this runs — to use a
+// proxy, export them first via `npm start` (scripts/start sources .env).
+try {
+  (
+    process as NodeJS.Process & { loadEnvFile?: (envPath: string) => void }
+  ).loadEnvFile?.(path.resolve(__dirname, "../../.env"));
+} catch {
+  // no .env present; rely on the ambient environment
+}
+
 type ServerOptions = {
   host: string;
   port: number;
@@ -162,8 +174,12 @@ function parseServerArgs(args: string[]): ServerOptions {
   }
 
   return {
-    host: parsed.values.host ?? "127.0.0.1",
-    port: parsed.values.port ? parsePort(parsed.values.port) : 8214,
+    host: parsed.values.host ?? process.env.HOST ?? "127.0.0.1",
+    port: parsed.values.port
+      ? parsePort(parsed.values.port)
+      : process.env.PORT
+        ? parsePort(process.env.PORT)
+        : 8214,
   };
 }
 

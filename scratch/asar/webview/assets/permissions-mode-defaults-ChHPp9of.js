@@ -1,0 +1,2 @@
+import{Kn as e,Zn as t,er as n}from"./app-server-manager-signals-BAE2L06u.js";var r=`agent-mode-by-host-id`,i=e(r,{}),a=e(`preferred-non-full-access-agent-mode-by-host-id`,{});function o(e,i){n(r,{...t(r,{}),[e]:i})}function s(e,t){return t[e]??null}export{o as a,s as i,i as n,a as r,r as t};
+//# sourceMappingURL=permissions-mode-defaults-ChHPp9of.js.map

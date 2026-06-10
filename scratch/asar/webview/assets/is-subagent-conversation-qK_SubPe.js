@@ -1,0 +1,2 @@
+import{Fi as e}from"./app-server-manager-signals-BAE2L06u.js";function t(t){return e(t?.source)?.parentThreadId!=null}function n(e,n){return!n&&t(e)}export{n,t};
+//# sourceMappingURL=is-subagent-conversation-qK_SubPe.js.map

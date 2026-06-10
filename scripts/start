@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Start codex-web, loading config from a project-root .env first.
+#
+# We source .env *before* exec'ing node (rather than relying on
+# process.loadEnvFile inside main.ts) because some variables — notably
+# NODE_USE_ENV_PROXY — are read by node during bootstrap, before any user code
+# runs. Setting them after the process has started is too late.
+
+cd "$(dirname "$0")/.."
+
+if [ -f .env ]; then
+  set -a
+  # shellcheck disable=SC1091
+  . ./.env
+  set +a
+fi
+
+exec node src/server/main.js "$@"

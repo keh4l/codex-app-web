@@ -1,0 +1,2 @@
+import{s as e}from"./chunk-Bj-mKKzh.js";import{Zn as t,z as n}from"./src-CdfxiY-T.js";import{t as r}from"./react-dom-waJIBoyA.js";import{f as i}from"./chunk-LFPYN7LY-CRkYzDF0.js";import{pt as a}from"./vscode-api-DH_DWhkY.js";import{t as o}from"./use-stable-callback-CcVBBljJ.js";var s=a(),c=e(r(),1);function l(){let e=(0,s.c)(2),r=i(),a;return e[0]===r?a=e[1]:(a=e=>{let i=n(t(e));(0,c.flushSync)(()=>{r(i)})},e[0]=r,e[1]=a),o(a)}export{l as t};
+//# sourceMappingURL=use-navigate-to-local-conversation-BoBYmOBM.js.map

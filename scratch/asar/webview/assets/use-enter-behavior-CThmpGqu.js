@@ -1,0 +1,2 @@
+import{La as e}from"./app-server-manager-signals-BAE2L06u.js";import{pt as t}from"./vscode-api-DH_DWhkY.js";import{a as n}from"./composer-atoms-C4iPUbho.js";var r=t();function i(){let t=(0,r.c)(3),[i,a]=e(n),o;return t[0]!==i||t[1]!==a?(o={enterBehavior:i,setEnterBehavior:a,isLoading:!1},t[0]=i,t[1]=a,t[2]=o):o=t[2],o}export{i as t};
+//# sourceMappingURL=use-enter-behavior-CThmpGqu.js.map

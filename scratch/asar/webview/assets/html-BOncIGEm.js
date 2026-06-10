@@ -1,0 +1,1 @@
+import{t as e}from"./html-BWsgnC6g.js";export{e as default};

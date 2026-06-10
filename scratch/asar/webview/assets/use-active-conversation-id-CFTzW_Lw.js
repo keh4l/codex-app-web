@@ -1,0 +1,2 @@
+import{Zn as e}from"./src-CdfxiY-T.js";import{d as t}from"./chunk-LFPYN7LY-CRkYzDF0.js";import{pt as n}from"./vscode-api-DH_DWhkY.js";var r=n();function i(){let n=(0,r.c)(2),i=t(`/local/:conversationId`),a=t(`/remote/:conversationId`),o=t(`/hotkey-window/thread/:conversationId`),s=i?.params.conversationId??a?.params.conversationId??o?.params.conversationId,c;return n[0]===s?c=n[1]:(c=s?e(s):null,n[0]=s,n[1]=c),c}export{i as t};
+//# sourceMappingURL=use-active-conversation-id-CFTzW_Lw.js.map
