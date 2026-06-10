@@ -1,6 +1,11 @@
-# codex-web
+# codex-app-web
 
 为 codex desktop 打造的浏览器前端，运行在你掌控的机器上。
+
+> 本仓库是 [0xcaff/codex-web](https://github.com/0xcaff/codex-web) 的私有 fork：
+> 已把打过补丁的桌面前端（`scratch/asar`，约 150 MB）直接提交进仓库，
+> clone 后即可运行，无需在每台机器上下载约 330 MB 的官方 Codex 应用。
+> ⚠️ 因为包含 OpenAI 专有前端代码，本仓库必须保持**私有**。
 
 https://github.com/user-attachments/assets/0a33cbd8-741c-412c-9e75-46dfe9324596
 
@@ -12,50 +17,139 @@ codex-web 把 codex desktop 带进浏览器，同时让后端继续运行在你�
 
 本项目力求做成尽可能薄的封装层，以确保 codex desktop 应用的上游变更能够被快速集成。
 
-## 用法
+## 工作原理（一句话）
 
-`codex-web` 既提供浏览器客户端，也托管桌面侧的桥接服务。默认情况下，它监听 `127.0.0.1:8214`。
+`codex-web` 把官方 Codex desktop（Electron）的前端跑在浏览器里，由内嵌的 desktop 主进程
+spawn `codex app-server`（stdio JSON-RPC）作为后端。默认监听 `127.0.0.1:8214`。
+codex 二进制的查找顺序：`.env` / 环境变量里的 `CODEX_CLI_PATH` → 进程 `PATH` 中的 `codex`。
 
-如果 `PATH` 中有 `codex`，它会直接使用；或者，如果你设置了 `CODEX_CLI_PATH`，则使用该路径。
-
-用 `npx` 运行：
-
-```bash
-npx --yes github:0xcaff/codex-web
-```
-
-或者用 nix 运行：
-
-```bash
-nix run github:0xcaff/codex-web
-```
-
-然后在浏览器中打开 <http://127.0.0.1:8214>。
-
-## 在本地运行此 fork（内置构建）
-
-此 fork 将打过补丁的桌面前端（`scratch/asar`）提交进了仓库，这样无需在每台机器上下载约 330 MB 的 Codex 应用即可运行。
-
-**支持平台：macOS 与 Linux**（与上游一致）。已提交的 `scratch/asar` 是 `darwin-arm64` 构建，但上游在每个操作系统上用的也正是这个 asar——它的内容是跨平台的 JS。有两点需要了解：
+**支持平台：macOS 与 Linux**（与上游一致）。已提交的 `scratch/asar` 是 `darwin-arm64`
+构建，但上游在每个操作系统上用的也正是这个 asar——它的内容是跨平台的 JS。有两点需要了解：
 
 - 运行时实际用到的唯一一个与平台相关的原生模块是 `better-sqlite3`，它并未内置（它位于顶层的 `node_modules` 中）。`npm install` 会为当前的操作系统/架构构建它，因此每台机器都能拿到正确的二进制文件。
-- 提交在 `scratch/asar/node_modules` 下的 arm64-macOS 原生模块（`node-pty`、`objc-js`）在无头服务器路径上从不会被加载——它们在 Linux/Intel 上闲置不用，无害。（无论如何，需要平台 `node-pty` 的终端功能目前也还没接上。）
+- 提交在 `scratch/asar/node_modules` 下的 arm64-macOS 原生模块（`node-pty`、`objc-js`）在无头服务器路径上从不会被加载——它们在 Linux/Intel 上闲置不用，无害。
 
-前置条件：Node 24+，用于构建 `better-sqlite3` 的 C/C++ 工具链（macOS：`xcode-select --install`；Debian/Ubuntu：`build-essential python3`），以及一个适用于你操作系统的 `codex` 二进制文件（在 PATH 上或通过 `CODEX_CLI_PATH` 指定）。
+`npx github:...` 对本 fork **不**起作用——npm 打包时会剥离嵌套的 `node_modules`
+并丢弃其中的原生模块。请使用 git clone。
+
+## 快速开始（macOS 本机）
+
+前置条件：Node 24+、Xcode Command Line Tools（`xcode-select --install`，编译
+`better-sqlite3` 用）、一个已登录的 `codex`。
 
 ```bash
+git clone https://github.com/keh4l/codex-app-web.git
+cd codex-app-web
 npm install          # 安装依赖；prepare 会重建 shim 与 server（不下载）
-cp .env.example .env # 然后按需设置 CODEX_CLI_PATH / 代理
+cp .env.example .env # 按需设置 CODEX_CLI_PATH / HOST / 代理
 npm start            # 加载 .env，然后启动 server
 ```
 
-然后打开 <http://127.0.0.1:8214>。
+打开 <http://127.0.0.1:8214>。macOS 上 `CODEX_CLI_PATH` 推荐直接用官方桌面应用自带的
+二进制：`/Applications/Codex.app/Contents/Resources/codex`（已登录的话凭据直接复用）。
 
-配置位于 `.env` 中（由 `scripts/start` 加载）：`CODEX_CLI_PATH`（留空 → 使用 PATH 中的 `codex`）、`HOST`、`PORT`，以及代理变量（`NODE_USE_ENV_PROXY` / `HTTP(S)_PROXY`）。仅当你的网络无法访问 `ab.chatgpt.com` 时才需要代理——没有它，UI 会在启动页卡住约 10 秒。代理变量只有通过 `npm start` 才会生效，直接 `node src/server/main.js` 则不行（node 在启动时就读取这些变量）。
+## Linux 服务器部署
 
-`npx github:...` 对这套内置方案**不**起作用——npm 打包时会剥离嵌套的 `node_modules` 并丢弃其中的原生模块。请使用 git clone。
+### 1. 前置条件
 
-要升级内置的 Codex 版本，请编辑 `scripts/prepare` 和 `default.nix` 中的版本号，运行 `npm run setup:asar`，然后提交刷新后的 `scratch/asar`。
+```bash
+# Debian/Ubuntu：Node 24+ 以及编译 better-sqlite3 的工具链
+sudo apt install -y build-essential python3 git
+
+# 安装 codex CLI 并登录（登录用户必须与之后运行服务的用户一致！）
+npm install -g @openai/codex
+codex login --device-auth
+```
+
+### 2. 拉取与安装
+
+```bash
+git clone https://github.com/keh4l/codex-app-web.git
+cd codex-app-web
+npm install     # 触发 prepare：只构建，不下载；并编译 Linux 版 better-sqlite3
+```
+
+### 3. 配置 `.env`（关键步骤）
+
+```bash
+cp .env.example .env
+```
+
+**`CODEX_CLI_PATH` 必须填绝对路径，并指向原生二进制。** 不要依赖 PATH：
+systemd / 宝塔等进程管理器的精简 PATH 里没有 npm 全局 bin 目录，交互终端里
+`codex` 能用不代表服务进程能找到（这是最常见的部署翻车点，报错为
+`Unable to locate the Codex CLI binary`）。
+
+用下面的命令找到 npm 包里自带的静态原生二进制：
+
+```bash
+find "$(npm root -g)/@openai/codex" -type f -name "codex*" ! -name "*.js" ! -name "*.json" -exec file {} \;
+# 输出形如：.../node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/bin/codex: ELF ...
+```
+
+把这个 ELF 文件的绝对路径填进 `.env`：
+
+```bash
+CODEX_CLI_PATH="/www/server/nodejs/v24.14.1/lib/node_modules/@openai/codex/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/bin/codex"
+HOST="0.0.0.0"   # 需要从其他机器访问时设置；注意阅读下方“安全”一节
+```
+
+注意：`npm install -g @openai/codex` 升级后这个深层路径可能变化，
+届时重新执行上面的 `find` 并更新 `.env` 即可。
+
+### 4. 启动
+
+```bash
+npm start        # 前台运行，先验证一切正常
+```
+
+浏览器打开 `http://服务器IP:8214` 确认页面可用后，再配置常驻服务。
+
+### 5. 常驻运行（systemd）
+
+`/etc/systemd/system/codex-web.service`：
+
+```ini
+[Unit]
+Description=codex-web
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/www/gitroot/codex-app-web
+ExecStart=/www/gitroot/codex-app-web/scripts/start
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+```
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now codex-web
+journalctl -u codex-web -f      # 跟踪日志
+```
+
+`ExecStart` 直接指向 `scripts/start`，它会自己 source `.env`，因此代理等
+启动期变量在 systemd 下同样生效。`User=` 必须与执行过 `codex login` 的用户一致。
+
+## 常见问题排查
+
+| 现象 | 原因与解法 |
+|---|---|
+| `Unable to locate the Codex CLI binary` | 服务进程的 PATH 没有 codex，且 `CODEX_CLI_PATH` 未设或路径错。按上文用 `find` 找到原生 ELF 二进制，绝对路径填进 `.env`，重启。 |
+| 登录相关报错 / 提示未登录 | `codex login` 的凭据存在 `~/.codex/auth.json`，跟用户绑定。服务运行用户（systemd 的 `User=`）必须与执行过 login 的用户一致。 |
+| UI 启动页卡约 10 秒才进主界面 | 服务器连不上 `ab.chatgpt.com`（Statsig 超时后才降级）。在 `.env` 打开代理四件套（`NODE_USE_ENV_PROXY` / `HTTP_PROXY` / `HTTPS_PROXY` / `NO_PROXY`），并务必经 `npm start` 启动（直接 `node src/server/main.js` 时代理变量不生效，node 在 bootstrap 阶段就读取它们）。 |
+| `npm install` 在 better-sqlite3 处报错 | 缺编译工具链：`sudo apt install build-essential python3`（macOS：`xcode-select --install`）。 |
+| 升级 `@openai/codex` 后又找不到二进制 | npm 包内部路径随版本变化，重新 `find` 并更新 `.env` 的 `CODEX_CLI_PATH`。 |
+
+## 升级内置的 Codex 前端版本
+
+编辑 `scripts/prepare` 和 `default.nix` 中的版本号，运行 `npm run setup:asar`
+（下载新版、解包、打补丁），验证后提交刷新的 `scratch/asar`。详见
+[UPGRADING.md](./UPGRADING.md)。
 
 ### 登录
 
@@ -77,15 +171,16 @@ codex login --device-auth
 codex app-server --listen unix:///tmp/codex-app-server.sock
 ```
 
-然后用代理辅助脚本运行 `codex-web`：
+然后让 codex-web 经代理脚本连接它（需要安装 [websocat](https://github.com/vi/websocat)）。
+在 `.env` 中设置：
 
 ```bash
-nix shell github:0xcaff/codex-web github:0xcaff/codex-web#codex_remote_proxy -c bash -lc '
-  export CODEX_UNIX_SOCKET=/tmp/codex-app-server.sock
-  export CODEX_CLI_PATH="$(command -v codex_remote_proxy)"
-  codex-web
-'
+CODEX_UNIX_SOCKET="/tmp/codex-app-server.sock"
+CODEX_CLI_PATH="/绝对路径/codex-app-web/scripts/codex_remote_proxy"
 ```
+
+再 `npm start` 即可。`codex_remote_proxy` 只接受 `app-server` 子命令，把 stdio
+桥接到已运行的 app-server 的 unix socket 上。
 
 ## 安全
 
