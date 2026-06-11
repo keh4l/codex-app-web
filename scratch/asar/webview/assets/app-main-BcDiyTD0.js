@@ -28659,11 +28659,14 @@ var fN = `client-sYWqzCYMRkUg4DqqiZcR5DGTNl2iD7zNJY0HoeDLzxR`,
   vN = `1569253508`,
   yN = {
     overrideAdapter: window.__ELECTRON_SHIM__.overrideAdapter,
+    logLevel: 0,
+    disableLogging: true,
     networkConfig: {
       api: pN,
       logEventUrl: TM,
       sdkExceptionUrl: mN,
       networkOverrideFunc: lN,
+      preventAllNetworkTraffic: true,
     },
   };
 function bN(e) {
