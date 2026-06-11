@@ -13065,7 +13065,7 @@ function requestWorkspaceDirectoryEntries(directoryPath) {
 		});
 	});
 }
-var RECONNECT_DELAY_MS, requestCounter, socket, reconnectTimeoutId, outboundQueue, pendingInvokes, pendingDirectoryEntries, rendererListeners, bridgedPorts, themeMediaQuery, mobileMediaQuery, initialSidebarState, electronShim, initialRoute, buildFlavor, ipcRenderer, contextBridge, webUtils;
+var RECONNECT_DELAY_MS, requestCounter, socket, reconnectTimeoutId, outboundQueue, pendingInvokes, pendingDirectoryEntries, rendererListeners, bridgedPorts, themeMediaQuery, mobileMediaQuery, initialSidebarState, electronShim, I18N_LAYER, I18N_LAYER_OVERRIDES, initialRoute, buildFlavor, ipcRenderer, contextBridge, webUtils;
 var init_shim = __esmMin((() => {
 	init_routes();
 	init_files();
@@ -13098,13 +13098,27 @@ var init_shim = __esmMin((() => {
 	mobileMediaQuery = matchMedia("(max-width: 768px)");
 	initialSidebarState = !mobileMediaQuery.matches;
 	electronShim = window.__ELECTRON_SHIM__ ??= {};
-	electronShim.overrideAdapter = { getGateOverride(e) {
-		if (e.name === "2929582856") return {
-			...e,
-			value: false
-		};
-		return null;
-	} };
+	I18N_LAYER = "72216192";
+	I18N_LAYER_OVERRIDES = { enable_i18n: true };
+	electronShim.overrideAdapter = {
+		getGateOverride(e) {
+			if (e.name === "2929582856") return {
+				...e,
+				value: false
+			};
+			return null;
+		},
+		getLayerOverride(e) {
+			if (e.name === I18N_LAYER) return {
+				...e,
+				__value: {
+					...e.__value,
+					...I18N_LAYER_OVERRIDES
+				}
+			};
+			return null;
+		}
+	};
 	initialRoute = mapBrowserPathToInitialRoute(window.location.pathname, window.location.search);
 	electronShim.initialRoute = initialRoute.memoryPath;
 	if (initialRoute.browserPath) window.history.pushState(void 0, "", initialRoute.browserPath);

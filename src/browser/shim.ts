@@ -142,12 +142,24 @@ type ElectronShimState = {
       e: StatsigGateEvaluation,
       ...args: unknown[]
     ) => StatsigGateEvaluation | null;
+    getLayerOverride?: (
+      e: StatsigLayerEvaluation,
+      ...args: unknown[]
+    ) => StatsigLayerEvaluation | null;
   };
 };
 
 type StatsigGateEvaluation = {
   name: string;
   value: boolean;
+  [key: string]: unknown;
+};
+
+type StatsigLayerEvaluation = {
+  name: string;
+  // Layer parameter values; the SDK rebuilds the typed `.get` from this when an
+  // override is returned (_mergeOverride), so providing __value is enough.
+  __value: Record<string, unknown>;
   [key: string]: unknown;
 };
 
@@ -384,12 +396,36 @@ const mobileMediaQuery = matchMedia("(max-width: 768px)");
 const initialSidebarState = !mobileMediaQuery.matches;
 const electronShim = (window.__ELECTRON_SHIM__ ??= {});
 
+// Statsig layer "72216192" carries `enable_i18n`, the flag that gates loading
+// translated UI messages. It is delivered by the live Statsig service, which
+// this deployment intentionally never reaches (telemetry is silenced and the
+// app is often served over plain http). Without it the locale provider leaves
+// `enable_i18n` false: the locale still resolves (the language picker even
+// renders in the chosen language), but no message bundle loads, so every string
+// falls back to its English default. Force it on locally so language selection
+// works offline. It is read via useLayer in both the locale provider and the
+// settings page, so the override must target the *layer* API.
+const I18N_LAYER = "72216192";
+const I18N_LAYER_OVERRIDES: Record<string, unknown> = {
+  enable_i18n: true,
+};
+
 electronShim.overrideAdapter = {
   getGateOverride(e) {
     if (e.name === "2929582856") { // codex_app_sunset
       return {
         ...e,
         value: false,
+      };
+    }
+
+    return null;
+  },
+  getLayerOverride(e) {
+    if (e.name === I18N_LAYER) {
+      return {
+        ...e,
+        __value: { ...e.__value, ...I18N_LAYER_OVERRIDES },
       };
     }
 
