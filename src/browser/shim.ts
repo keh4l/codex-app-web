@@ -89,6 +89,22 @@ type MainToRendererMessage =
 
 const RECONNECT_DELAY_MS = 1_000;
 
+// crypto.randomUUID only exists in secure contexts (https / localhost), but
+// codex-web is commonly served over plain http from a LAN/server IP. Statsig
+// and the vscode-api RPC layer call it unguarded, so polyfill it from
+// getRandomValues, which is available in insecure contexts too.
+if (typeof crypto.randomUUID !== "function") {
+  crypto.randomUUID = () => {
+    const bytes = crypto.getRandomValues(new Uint8Array(16));
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    const hex = Array.from(bytes, (byte) =>
+      byte.toString(16).padStart(2, "0"),
+    ).join("");
+    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+  };
+}
+
 // Minimal `process` for the browser context. Several vendored modules
 // dereference it without a typeof guard (the preload's isIntelMacBuild, the
 // vscode path polyfill's process.cwd, ...) and crash the app otherwise. Keep
