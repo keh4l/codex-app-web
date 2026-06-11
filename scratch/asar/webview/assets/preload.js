@@ -12944,6 +12944,18 @@ function handleIncomingMessage(message) {
 		emitRendererEvent(message.channel, message.args);
 		return;
 	}
+	if (message.type === "ipc-port-message") {
+		bridgedPorts.get(message.portId)?.postMessage(message.data);
+		return;
+	}
+	if (message.type === "ipc-port-close") {
+		const port = bridgedPorts.get(message.portId);
+		if (port) {
+			bridgedPorts.delete(message.portId);
+			port.close();
+		}
+		return;
+	}
 	if (message.type === "ipc-renderer-invoke-result") {
 		const pending = pendingInvokes.get(message.requestId);
 		if (!pending) return;
@@ -13053,12 +13065,20 @@ function requestWorkspaceDirectoryEntries(directoryPath) {
 		});
 	});
 }
-var RECONNECT_DELAY_MS, requestCounter, socket, reconnectTimeoutId, outboundQueue, pendingInvokes, pendingDirectoryEntries, rendererListeners, themeMediaQuery, mobileMediaQuery, initialSidebarState, electronShim, initialRoute, buildFlavor, ipcRenderer, contextBridge, webUtils;
+var RECONNECT_DELAY_MS, requestCounter, socket, reconnectTimeoutId, outboundQueue, pendingInvokes, pendingDirectoryEntries, rendererListeners, bridgedPorts, themeMediaQuery, mobileMediaQuery, initialSidebarState, electronShim, initialRoute, buildFlavor, ipcRenderer, contextBridge, webUtils;
 var init_shim = __esmMin((() => {
 	init_routes();
 	init_files();
 	init_workspace_root_dialog();
 	RECONNECT_DELAY_MS = 1e3;
+	if (!("process" in globalThis)) globalThis.process = {
+		argv: [],
+		arch: "arm64",
+		cwd: () => "/",
+		env: {},
+		platform: "darwin",
+		versions: {}
+	};
 	requestCounter = 0;
 	socket = null;
 	reconnectTimeoutId = null;
@@ -13066,6 +13086,7 @@ var init_shim = __esmMin((() => {
 	pendingInvokes = /* @__PURE__ */ new Map();
 	pendingDirectoryEntries = /* @__PURE__ */ new Map();
 	rendererListeners = /* @__PURE__ */ new Map();
+	bridgedPorts = /* @__PURE__ */ new Map();
 	themeMediaQuery = matchMedia("(prefers-color-scheme: dark)");
 	mobileMediaQuery = matchMedia("(max-width: 768px)");
 	initialSidebarState = !mobileMediaQuery.matches;
@@ -13139,15 +13160,37 @@ var init_shim = __esmMin((() => {
 				args
 			});
 		},
+		postMessage(channel, _message, transfer) {
+			const port = transfer?.[0];
+			if (!(port instanceof MessagePort)) {
+				console.warn(`[electron-shim] ipcRenderer.postMessage(${channel}) without a MessagePort dropped`);
+				return;
+			}
+			const portId = typeof crypto.randomUUID === "function" ? crypto.randomUUID() : `port_${nextRequestId()}`;
+			bridgedPorts.set(portId, port);
+			port.onmessage = (event) => {
+				enqueueMessage({
+					type: "ipc-port-message",
+					portId,
+					data: event.data
+				});
+			};
+			enqueueMessage({
+				type: "ipc-renderer-post-message",
+				channel,
+				portId
+			});
+		},
 		sendSync(channel, ..._args) {
 			if (channel === "codex_desktop:get-sentry-init-options") return {
 				codexAppSessionId: "42626fde-7064-471f-b44d-b1a7ad849c7f",
 				buildFlavor,
 				buildNumber: null,
-				appVersion: "26.513.20950",
+				appVersion: "26.608.12217",
 				enabled: false
 			};
 			if (channel === "codex_desktop:get-build-flavor") return buildFlavor;
+			if (channel === "codex_desktop:get-uses-owl-app-shell") return false;
 			if (channel === "codex_desktop:get-shared-object-snapshot") return {
 				host_config: {
 					id: "local",
@@ -13195,50 +13238,50 @@ var init_shim = __esmMin((() => {
 //#endregion
 //#region scratch/asar/.vite/build/preload.js
 var e = (init_shim(), __toCommonJS(shim_exports));
-var t = `codex_desktop:mcp-app-sandbox-host-message`, n = `codex_desktop:show-context-menu`, r = `codex_desktop:show-application-menu`, i = `codex_desktop:get-sentry-init-options`, a = `codex_desktop:get-build-flavor`, o = `codex_desktop:get-system-theme-variant`, s = `codex_desktop:get-fast-mode-rollout-metrics`, c = `codex_desktop:system-theme-variant-updated`, l = `codex_desktop:trigger-sentry-test`;
-function u(e) {
+var t = `codex_desktop:mcp-app-sandbox-host-message`, n = `codex_desktop:show-context-menu`, r = `codex_desktop:show-application-menu`, i = `codex_desktop:get-sentry-init-options`, a = `codex_desktop:get-build-flavor`, o = `codex_desktop:get-uses-owl-app-shell`, s = `codex_desktop:get-system-theme-variant`, c = `codex_desktop:get-fast-mode-rollout-metrics`, l = `codex_desktop:system-theme-variant-updated`, u = `codex_desktop:trigger-sentry-test`, d = `codex_desktop:connect-app-host`;
+function f(e) {
 	return `codex_desktop:worker:${e}:from-view`;
 }
-function d(e) {
+function p(e) {
 	return `codex_desktop:worker:${e}:for-view`;
 }
-var f = `electron`, p = `codex_desktop:message-from-view`, m = `codex_desktop:message-for-view`, h = e.ipcRenderer.sendSync(i), g = e.ipcRenderer.sendSync(a), _ = e.ipcRenderer.sendSync(`codex_desktop:get-shared-object-snapshot`) ?? {}, v = e.ipcRenderer.sendSync(o), y = () => v, b = /* @__PURE__ */ new Set();
-e.ipcRenderer.on(c, (e, t) => {
-	v = t, b.forEach((e) => {
+var m = `electron`, h = `codex_desktop:message-from-view`, g = `codex_desktop:message-for-view`, _ = e.ipcRenderer.sendSync(i), v = e.ipcRenderer.sendSync(a), y = e.ipcRenderer.sendSync(o) === !0, b = e.ipcRenderer.sendSync(`codex_desktop:get-shared-object-snapshot`) ?? {}, x = e.ipcRenderer.sendSync(s), S = () => x, C = /* @__PURE__ */ new Set();
+e.ipcRenderer.on(l, (e, t) => {
+	x = t, C.forEach((e) => {
 		e();
 	});
 });
-function x(e, t) {
+function w(e, t) {
 	if (t === void 0) {
-		delete _[e];
+		delete b[e];
 		return;
 	}
-	_[e] = t;
+	b[e] = t;
 }
-var S = /* @__PURE__ */ new Map(), C = /* @__PURE__ */ new Map(), w = {
-	windowType: f,
+var T = /* @__PURE__ */ new Map(), E = /* @__PURE__ */ new Map(), D = {
+	windowType: m,
 	sendMessageFromView: async (t) => {
-		t.type === `shared-object-set` && x(t.key, t.value), await e.ipcRenderer.invoke(p, t);
+		t.type === `shared-object-set` && w(t.key, t.value), await e.ipcRenderer.invoke(h, t);
 	},
 	getPathForFile: (t) => e.webUtils.getPathForFile(t) || null,
 	sendWorkerMessageFromView: async (t, n) => {
-		await e.ipcRenderer.invoke(u(t), n);
+		await e.ipcRenderer.invoke(f(t), n);
 	},
 	subscribeToWorkerMessages: (t, n) => {
-		let r = S.get(t);
-		r || (r = /* @__PURE__ */ new Set(), S.set(t, r));
-		let i = C.get(t);
+		let r = T.get(t);
+		r || (r = /* @__PURE__ */ new Set(), T.set(t, r));
+		let i = E.get(t);
 		return i || (i = (e, n) => {
-			let r = S.get(t);
+			let r = T.get(t);
 			r && r.forEach((e) => {
 				e(n);
 			});
-		}, C.set(t, i), e.ipcRenderer.on(d(t), i)), r.add(n), () => {
-			let r = S.get(t);
+		}, E.set(t, i), e.ipcRenderer.on(p(t), i)), r.add(n), () => {
+			let r = T.get(t);
 			if (!r || (r.delete(n), r.size > 0)) return;
-			S.delete(t);
-			let i = C.get(t);
-			i && e.ipcRenderer.removeListener(d(t), i), C.delete(t);
+			T.delete(t);
+			let i = E.get(t);
+			i && e.ipcRenderer.removeListener(p(t), i), E.delete(t);
 		};
 	},
 	showContextMenu: async (t) => e.ipcRenderer.invoke(n, t),
@@ -13249,26 +13292,32 @@ var S = /* @__PURE__ */ new Map(), C = /* @__PURE__ */ new Map(), w = {
 			y: i
 		});
 	},
-	getFastModeRolloutMetrics: async (t) => e.ipcRenderer.invoke(s, t),
-	getSharedObjectSnapshotValue: (e) => _[e],
-	getSystemThemeVariant: y,
-	subscribeToSystemThemeVariant: (e) => (b.add(e), () => {
-		b.delete(e);
+	getFastModeRolloutMetrics: async (t) => e.ipcRenderer.invoke(c, t),
+	getSharedObjectSnapshotValue: (e) => b[e],
+	getSystemThemeVariant: S,
+	subscribeToSystemThemeVariant: (e) => (C.add(e), () => {
+		C.delete(e);
 	}),
 	triggerSentryTestError: async () => {
-		await e.ipcRenderer.invoke(l);
+		await e.ipcRenderer.invoke(u);
 	},
-	getSentryInitOptions: () => h,
-	getAppSessionId: () => h.codexAppSessionId,
-	getBuildFlavor: () => g
+	getSentryInitOptions: () => _,
+	getAppSessionId: () => _.codexAppSessionId,
+	getBuildFlavor: () => v,
+	isIntelMacBuild: () => process.platform === `darwin` && process.arch === `x64`,
+	usesOwlAppShell: () => y
 };
-e.ipcRenderer.on(m, (e, t) => {
+e.ipcRenderer.on(g, (e, t) => {
 	let n = t;
-	n.type === `shared-object-updated` && x(n.key, n.value), window.dispatchEvent(new MessageEvent(`message`, { data: t }));
+	n.type === `shared-object-updated` && w(n.key, n.value), window.dispatchEvent(new MessageEvent(`message`, { data: t }));
 }), e.ipcRenderer.on(t, (e, t) => {
 	let n = window.location.origin;
 	n !== `null` && window.postMessage(t, n, e.ports);
-}), e.contextBridge.exposeInMainWorld(`codexWindowType`, f), e.contextBridge.exposeInMainWorld(`electronBridge`, w);
+}), e.contextBridge.exposeInMainWorld(`codexWindowType`, m), e.contextBridge.exposeInMainWorld(`electronBridge`, D), typeof window < `u` && window.addEventListener(`message`, (t) => {
+	if (t.source !== window || t.data?.type !== `connect-app-host`) return;
+	let { port: n } = t.data;
+	e.ipcRenderer.postMessage(d, void 0, [n]);
+});
 //#endregion
 
 //# sourceMappingURL=preload.js.map

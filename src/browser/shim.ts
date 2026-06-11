@@ -27,6 +27,20 @@ type RendererToMainMessage =
       args: unknown[];
     }
   | {
+      type: "ipc-renderer-post-message";
+      channel: string;
+      portId: string;
+    }
+  | {
+      type: "ipc-port-message";
+      portId: string;
+      data: unknown;
+    }
+  | {
+      type: "ipc-port-close";
+      portId: string;
+    }
+  | {
       type: "workspace-directory-entries-request";
       requestId: string;
       directoryPath: string | null;
@@ -38,6 +52,15 @@ type MainToRendererMessage =
       type: "ipc-main-event";
       channel: string;
       args: unknown[];
+    }
+  | {
+      type: "ipc-port-message";
+      portId: string;
+      data: unknown;
+    }
+  | {
+      type: "ipc-port-close";
+      portId: string;
     }
   | {
       type: "ipc-renderer-invoke-result";
@@ -65,6 +88,21 @@ type MainToRendererMessage =
     };
 
 const RECONNECT_DELAY_MS = 1_000;
+
+// Minimal `process` for the browser context. Several vendored modules
+// dereference it without a typeof guard (the preload's isIntelMacBuild, the
+// vscode path polyfill's process.cwd, ...) and crash the app otherwise. Keep
+// `versions` empty so Node/Electron detection in guarded code stays false.
+if (!("process" in globalThis)) {
+  (globalThis as Record<string, unknown>).process = {
+    argv: [] as string[],
+    arch: "arm64",
+    cwd: () => "/",
+    env: {} as Record<string, string | undefined>,
+    platform: "darwin",
+    versions: {} as Record<string, string>,
+  };
+}
 
 type MemoryNavigationChange = {
   action: "POP" | "PUSH" | "REPLACE";
@@ -124,6 +162,9 @@ const pendingDirectoryEntries = new Map<
   }
 >();
 const rendererListeners = new Map<string, Set<IpcListener>>();
+// MessagePorts handed to ipcRenderer.postMessage (26.608+ connect-app-host
+// RPC). The port stays in this page; only its string frames cross the bridge.
+const bridgedPorts = new Map<string, MessagePort>();
 
 function unimplemented(method: string): never {
   debugger;
@@ -144,6 +185,20 @@ export function emitRendererEvent(channel: string, args: unknown[]): void {
 function handleIncomingMessage(message: MainToRendererMessage): void {
   if (message.type === "ipc-main-event") {
     emitRendererEvent(message.channel, message.args);
+    return;
+  }
+
+  if (message.type === "ipc-port-message") {
+    bridgedPorts.get(message.portId)?.postMessage(message.data);
+    return;
+  }
+
+  if (message.type === "ipc-port-close") {
+    const port = bridgedPorts.get(message.portId);
+    if (port) {
+      bridgedPorts.delete(message.portId);
+      port.close();
+    }
     return;
   }
 
@@ -422,6 +477,33 @@ export const ipcRenderer = {
       args,
     });
   },
+  postMessage(channel: string, _message: unknown, transfer?: unknown[]): void {
+    const port = transfer?.[0];
+    if (!(port instanceof MessagePort)) {
+      console.warn(
+        `[electron-shim] ipcRenderer.postMessage(${channel}) without a MessagePort dropped`,
+      );
+      return;
+    }
+
+    const portId =
+      typeof crypto.randomUUID === "function"
+        ? crypto.randomUUID()
+        : `port_${nextRequestId()}`;
+    bridgedPorts.set(portId, port);
+    port.onmessage = (event) => {
+      enqueueMessage({
+        type: "ipc-port-message",
+        portId,
+        data: event.data,
+      });
+    };
+    enqueueMessage({
+      type: "ipc-renderer-post-message",
+      channel,
+      portId,
+    });
+  },
   sendSync(channel: string, ..._args: unknown[]): unknown {
     if (channel === "codex_desktop:get-sentry-init-options") {
       return {
@@ -435,6 +517,11 @@ export const ipcRenderer = {
 
     if (channel === "codex_desktop:get-build-flavor") {
       return buildFlavor;
+    }
+
+    if (channel === "codex_desktop:get-uses-owl-app-shell") {
+      // 26.608+: gate for the new "owl" app shell; keep the classic shell.
+      return false;
     }
 
     if (channel === "codex_desktop:get-shared-object-snapshot") {

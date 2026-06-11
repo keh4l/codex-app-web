@@ -1,34 +1,33 @@
---- a/webview/assets/settings-back-route-C5YW47j2.js
-+++ b/webview/assets/settings-back-route-C5YW47j2.js
-@@ -1,5 +1,6 @@
-+import { s as g } from "./chunk-Bj-mKKzh.js";
- import { Gn as e, Qn as t } from "./apps-Au-fp4y1.js";
--import { t as n } from "./jsx-runtime-Bj4hVTj7.js";
-+import { n as _, t as n } from "./jsx-runtime-Bj4hVTj7.js";
- import { t as r } from "./clsx-Duxel1Jl.js";
- import {
-   J as i,
-@@ -9,7 +10,8 @@
-   y as c,
- } from "./vscode-api-DH_DWhkY.js";
- import { t as l } from "./badge-0UPLZdLW.js";
--var u = s();
-+var u = s(),
-+  v = g(_());
- function d() {
-   let n = (0, u.c)(3),
-     r = o(a),
+--- a/webview/assets/settings-back-route-UibPZoHg.js
++++ b/webview/assets/settings-back-route-UibPZoHg.js
+@@ -1,4 +1,5 @@
+-import { t as e } from "./jsx-runtime-DXKlqYIQ.js";
++import { s as b } from "./chunk-Cq_f4orQ.js";
++import { n as x, t as e } from "./jsx-runtime-DXKlqYIQ.js";
+ import { R as t, h as n, o as r, t as i } from "./app-scope-DbsKKT7R.js";
+ import { p as a } from "./vscode-api-DIjwnE7x.js";
+ import { t as o } from "./clsx-BJDJerUC.js";
+@@ -8,7 +9,8 @@
+ import { t as d } from "./use-register-command-r35h3dK2.js";
+ import { t as f } from "./badge-Br5q1wxm.js";
+ import { t as p } from "./animations-DgZTlRY_.js";
+-var m = t();
++var m = t(),
++  S = b(x());
+ function h() {
+   let e = (0, m.c)(4),
+     t = r(i),
 @@ -24,7 +26,12 @@
-       (n[0] = r),
-       (n[1] = i),
-       (n[2] = s)),
--    c(`toggle-sidebar`, i, s));
-+    c(`toggle-sidebar`, i, s),
-+    v.useEffect(() => {
+   d(`toggleSidebar`, o);
+   let s;
+   (e[2] === t ? (s = e[3]) : ((s = [t]), (e[2] = t), (e[3] = s)),
+-    a(`toggle-sidebar`, o, s));
++    a(`toggle-sidebar`, o, s),
++    S.useEffect(() => {
 +      window.__ELECTRON_SHIM__.closeSidebar = () => {
-+        t(r, !1);
++        c(t, !1);
 +      };
-+    }, [r]));
++    }, [t]));
  }
- var f = n();
- function p(e) {
+ var g = e();
+ function _(e) {

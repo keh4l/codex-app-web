@@ -1,2 +1,0 @@
-import{I as e,pt as t,v as n}from"./vscode-api-DH_DWhkY.js";var r=t();async function i(e,t,n){await e.invalidateQueries({queryKey:t}),await n(t)}function a(){let t=(0,r.c)(2),n=e(),a;return t[0]===n?a=t[1]:(a=async e=>{await i(n,e,o)},t[0]=n,t[1]=a),a}function o(e){n.dispatchMessage(`query-cache-invalidate`,{queryKey:[...e]})}export{a as t};
-//# sourceMappingURL=invalidate-queries-and-broadcast-C-mSX1QZ.js.map

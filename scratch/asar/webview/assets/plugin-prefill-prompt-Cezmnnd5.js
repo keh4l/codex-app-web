@@ -1,0 +1,2 @@
+import{a as e}from"./format-skill-title-B3wdGnF9.js";import{y as t}from"./mention-item-aKflgYEg.js";function n(e){return e?.map(e=>e.trim()).find(e=>e.length>0)??null}function r({defaultPrompt:n,pluginDisplayName:r,pluginId:i}){return`${`[@${r}](${e(t(i))})`} ${n?.trim()??``}`}export{n,r as t};
+//# sourceMappingURL=plugin-prefill-prompt-Cezmnnd5.js.map

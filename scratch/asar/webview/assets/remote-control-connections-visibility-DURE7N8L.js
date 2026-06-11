@@ -1,2 +1,0 @@
-import{p as e,pt as t}from"./vscode-api-DH_DWhkY.js";import{r as n}from"./remote-connection-visibility-CMLPP7XS.js";var r=t();function i(){let t=(0,r.c)(3),[i]=e(`remote_control_connections_state`),o=n(),s;return t[0]!==i||t[1]!==o?(s=a({remoteControlConnectionsState:i,slingshotEnabled:o}),t[0]=i,t[1]=o,t[2]=s):s=t[2],s}function a({remoteControlConnectionsState:e,slingshotEnabled:t}){return t&&(e?.available??!0)&&e?.accessRequired!==!0}export{i as t};
-//# sourceMappingURL=remote-control-connections-visibility-DURE7N8L.js.map

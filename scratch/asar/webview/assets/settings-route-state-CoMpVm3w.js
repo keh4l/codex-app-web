@@ -1,2 +1,0 @@
-import{Br as e,Wr as t}from"./src-CdfxiY-T.js";var n=e({workspaceRoot:t().min(1).nullable().optional()}).passthrough();function r(e){let t=n.safeParse(e);return!t.success||!Object.hasOwn(t.data,`workspaceRoot`)?{hasValue:!1,workspaceRoot:null}:{hasValue:!0,workspaceRoot:t.data.workspaceRoot??null}}export{r as t};
-//# sourceMappingURL=settings-route-state-CoMpVm3w.js.map

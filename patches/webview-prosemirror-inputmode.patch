@@ -1,24 +1,29 @@
---- a/webview/assets/prosemirror-DbRBBq50.js
-+++ b/webview/assets/prosemirror-DbRBBq50.js
-@@ -25553,6 +25553,13 @@
-   let o = new EventTarget(),
-     s = new Sp(),
-     c = a,
+--- a/webview/assets/composer-controller-dL4CgOni.js
++++ b/webview/assets/composer-controller-dL4CgOni.js
+@@ -20246,8 +20246,18 @@
+     u = new EventTarget(),
+     d = new rl(),
+     f = o,
 +    inputModeDisabled = !1,
-+    getAttributes = () => (inputModeDisabled ? {} : { inputmode: `none` }),
++    getAttributes = () =>
++      inputModeDisabled
++        ? { spellcheck: `true` }
++        : { spellcheck: `true`, inputmode: `none` },
 +    setPointerInputMode = (e) => {
 +      inputModeDisabled !== e &&
 +        ((inputModeDisabled = e),
-+        l.isDestroyed || l.setProps({ attributes: getAttributes }));
++        p.isDestroyed || p.setProps({ attributes: getAttributes }));
 +    },
-     l = new of(null, {
-       state: zi.create({
-         schema: yp,
-@@ -25635,6 +25642,18 @@
-         let t = l.state.apply(e);
-         (l.updateState(t), o.dispatchEvent(new Event(Ki)));
-       },
+     p = new nc(null, {
+-      attributes: { spellcheck: `true` },
 +      attributes: getAttributes,
+       state: G.create({
+         schema: nl,
+         doc:
+@@ -20335,6 +20345,17 @@
+         let t = p.state.apply(e);
+         (p.updateState(t), u.dispatchEvent(new Event(we)));
+       },
 +      handleDOMEvents: {
 +        mousedown(e, t) {
 +          return (setPointerInputMode(!0), !1);

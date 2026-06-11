@@ -1,0 +1,2 @@
+import{c as e}from"./app-scope-DbsKKT7R.js";import{K as t}from"./app-server-manager-signals-DixsiAkQ.js";import{t as n}from"./route-scope-5oViaHuP.js";var r=e(n,({get:e,scope:n})=>{if(n.value.routeKind!==`local-thread`)return null;let r=e(t,n.value.conversationId);return r?.turnId==null?null:{threadId:n.value.conversationId,turnId:r.turnId}});export{r as t};
+//# sourceMappingURL=codex-analytics-attribution-CrYOHfkI.js.map

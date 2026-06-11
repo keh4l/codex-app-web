@@ -16,6 +16,7 @@ type IpcMainEvent = {
   returnValue: unknown;
   processId: number;
   frameId: number;
+  ports: unknown[];
   sender: StubWebContents;
   senderFrame: {
     url: string;
@@ -24,11 +25,23 @@ type IpcMainEvent = {
 };
 
 type IpcMainBridgeState = {
-  broadcastToRenderer?: (message: {
-    type: "ipc-main-event";
-    channel: string;
-    args: unknown[];
-  }) => void;
+  broadcastToRenderer?: (
+    message:
+      | {
+          type: "ipc-main-event";
+          channel: string;
+          args: unknown[];
+        }
+      | {
+          type: "ipc-port-message";
+          portId: string;
+          data: unknown;
+        }
+      | {
+          type: "ipc-port-close";
+          portId: string;
+        },
+  ) => void;
   handleRendererInvoke?: (
     channel: string,
     args: unknown[],
@@ -39,6 +52,9 @@ type IpcMainBridgeState = {
     args: unknown[],
     sourceUrl?: string,
   ) => void;
+  handleRendererPostMessage?: (channel: string, portId: string) => void;
+  handlePortMessage?: (portId: string, data: unknown) => void;
+  handlePortClose?: (portId: string) => void;
 };
 
 function getIpcMainBridgeState(): IpcMainBridgeState {
@@ -174,11 +190,90 @@ const rendererWebContents: StubWebContents = {
   },
 };
 
+// A MessagePortMain stand-in whose frames travel over the websocket bridge.
+// 26.608+ transfers a MessagePort via ipcRenderer.postMessage
+// (codex_desktop:connect-app-host) and runs an RPC session over it; the
+// transport only ever sends strings (or null for close), so relaying the
+// frames as JSON is lossless. Unlike createMessagePortStub this stays quiet:
+// RPC traffic is far too chatty to log per message.
+type BridgedMessagePort = {
+  close: () => void;
+  emitClose: () => void;
+  emitMessage: (data: unknown) => void;
+  off: (event: string, listener: StubListener) => unknown;
+  on: (event: string, listener: StubListener) => unknown;
+  once: (event: string, listener: StubListener) => unknown;
+  postMessage: (data: unknown) => void;
+  removeListener: (event: string, listener: StubListener) => unknown;
+  start: () => void;
+};
+
+const bridgedPorts = new Map<string, BridgedMessagePort>();
+
+function createBridgedMessagePort(portId: string): BridgedMessagePort {
+  const listeners = new Map<string, Set<StubListener>>();
+
+  const emit = (event: string, ...args: unknown[]): void => {
+    for (const listener of [...(listeners.get(event) ?? [])]) {
+      listener(...args);
+    }
+  };
+
+  const port: BridgedMessagePort = {
+    on(event: string, listener: StubListener): unknown {
+      const eventListeners = listeners.get(event) ?? new Set<StubListener>();
+      eventListeners.add(listener);
+      listeners.set(event, eventListeners);
+      return port;
+    },
+    once(event: string, listener: StubListener): unknown {
+      const wrapped: StubListener = (...args: unknown[]) => {
+        port.removeListener(event, wrapped);
+        listener(...args);
+      };
+      return port.on(event, wrapped);
+    },
+    removeListener(event: string, listener: StubListener): unknown {
+      listeners.get(event)?.delete(listener);
+      return port;
+    },
+    off(event: string, listener: StubListener): unknown {
+      return port.removeListener(event, listener);
+    },
+    start(): void {},
+    postMessage(data: unknown): void {
+      getIpcMainBridgeState().broadcastToRenderer?.({
+        type: "ipc-port-message",
+        portId,
+        data,
+      });
+    },
+    close(): void {
+      if (bridgedPorts.delete(portId)) {
+        getIpcMainBridgeState().broadcastToRenderer?.({
+          type: "ipc-port-close",
+          portId,
+        });
+      }
+    },
+    emitMessage(data: unknown): void {
+      emit("message", { data, ports: [] });
+    },
+    emitClose(): void {
+      bridgedPorts.delete(portId);
+      emit("close");
+    },
+  };
+
+  return port;
+}
+
 function createIpcMainEvent(): IpcMainEvent {
   const event: IpcMainEvent = {
     returnValue: undefined,
     processId: 1,
     frameId: 1,
+    ports: [],
     sender: rendererWebContents,
     senderFrame: rendererMainFrame,
     reply: (channel: string, ...args: unknown[]): void => {
@@ -227,7 +322,48 @@ function createIpcMainStub(): {
     sourceUrl?: string,
   ): void => {
     const event = createIpcMainEvent();
-    emitter.emit(channel, event, ...args);
+    try {
+      emitter.emit(channel, event, ...args);
+    } catch (error) {
+      // A bad renderer message must not take down the whole server process.
+      console.error(
+        `[electron-main-stub] ipcMain handler for ${channel} threw`,
+        error,
+      );
+    }
+  };
+
+  bridgeState.handleRendererPostMessage = (
+    channel: string,
+    portId: string,
+  ): void => {
+    const port = createBridgedMessagePort(portId);
+    bridgedPorts.set(portId, port);
+    const event = createIpcMainEvent();
+    event.ports = [port];
+    try {
+      emitter.emit(channel, event);
+    } catch (error) {
+      console.error(
+        `[electron-main-stub] ipcMain handler for ${channel} threw`,
+        error,
+      );
+    }
+  };
+
+  bridgeState.handlePortMessage = (portId: string, data: unknown): void => {
+    try {
+      bridgedPorts.get(portId)?.emitMessage(data);
+    } catch (error) {
+      console.error(
+        `[electron-main-stub] bridged port ${portId} message handler threw`,
+        error,
+      );
+    }
+  };
+
+  bridgeState.handlePortClose = (portId: string): void => {
+    bridgedPorts.get(portId)?.emitClose();
   };
 
   return {
@@ -383,6 +519,10 @@ class BrowserWindow {
           if (prop in target) {
             return target[prop as keyof typeof target];
           }
+          if (prop === "then") {
+            // keep `await webContents` from hanging on a stub thenable
+            return undefined;
+          }
           return createDeepStub(
             `BrowserWindow#${this.id}.webContents.${String(prop)}`,
           );
@@ -396,6 +536,11 @@ class BrowserWindow {
       get: (target, prop) => {
         if (prop in target) {
           return target[prop as keyof typeof target];
+        }
+        if (prop === "then") {
+          // 26.608 awaits BrowserWindow instances; a stub thenable that never
+          // resolves would hang main-process startup forever.
+          return undefined;
         }
         return createDeepStub(`BrowserWindow#${target.id}.${String(prop)}`);
       },
@@ -833,6 +978,14 @@ const webContents = {
   fromId(id: number): undefined {
     log("webContents.fromId", [id]);
     return undefined;
+  },
+  getFocusedWebContents(): null {
+    log("webContents.getFocusedWebContents", []);
+    return null;
+  },
+  getAllWebContents(): unknown[] {
+    log("webContents.getAllWebContents", []);
+    return [];
   },
 };
 class MessageChannelMain {

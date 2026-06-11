@@ -1,0 +1,2 @@
+import{s as e}from"./app-scope-DbsKKT7R.js";import{ls as t,v as n}from"./app-server-manager-signals-DixsiAkQ.js";function r(){return t(e(n)).kind!==`local`}export{r as t};
+//# sourceMappingURL=use-is-remote-host-Ck9YD_nw.js.map

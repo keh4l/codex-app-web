@@ -1,0 +1,2 @@
+function e(e){let t=e?.modelContextWindow??null,n=e?.last.totalTokens??null;if(t==null||t<=0||n==null||n<0)return{percent:null,usedTokens:null,contextWindow:null,remainingTokens:null};let r=Math.min(n,t),i=r/t*100;return Number.isFinite(i)?{percent:i,usedTokens:r,contextWindow:t,remainingTokens:Math.max(t-r,0)}:{percent:null,usedTokens:null,contextWindow:null,remainingTokens:null}}export{e as t};
+//# sourceMappingURL=cmdk-CbHWDXg2.js.map
