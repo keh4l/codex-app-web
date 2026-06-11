@@ -88,6 +88,14 @@ type MainToRendererMessage =
     };
 
 const RECONNECT_DELAY_MS = 1_000;
+// Application-level heartbeat. A cross-region ws link can silently become a
+// half-open dead connection (no RST): the browser still holds a socket it
+// believes is OPEN, but nothing flows, so requests hang forever until TCP
+// eventually times out (tens of seconds to minutes). Ping periodically; if the
+// server doesn't answer — or send anything — within the timeout, force a
+// reconnect, turning a permanent hang into a quick recovery.
+const HEARTBEAT_INTERVAL_MS = 15_000;
+const PONG_TIMEOUT_MS = 10_000;
 
 // crypto.randomUUID only exists in secure contexts (https / localhost), but
 // codex-web is commonly served over plain http from a LAN/server IP. Statsig
@@ -174,6 +182,8 @@ declare const __CODEX_APP_VERSION__: string;
 let requestCounter = 0;
 let socket: WebSocket | null = null;
 let reconnectTimeoutId: number | null = null;
+let heartbeatIntervalId: number | null = null;
+let pongTimeoutId: number | null = null;
 const outboundQueue: RendererToMainMessage[] = [];
 const pendingInvokes = new Map<
   string,
@@ -277,6 +287,35 @@ function scheduleReconnect(): void {
   }, RECONNECT_DELAY_MS);
 }
 
+function stopHeartbeat(): void {
+  if (heartbeatIntervalId !== null) {
+    window.clearInterval(heartbeatIntervalId);
+    heartbeatIntervalId = null;
+  }
+  if (pongTimeoutId !== null) {
+    window.clearTimeout(pongTimeoutId);
+    pongTimeoutId = null;
+  }
+}
+
+function startHeartbeat(): void {
+  stopHeartbeat();
+  heartbeatIntervalId = window.setInterval(() => {
+    if (!socket || socket.readyState !== WebSocket.OPEN) {
+      return;
+    }
+    socket.send(JSON.stringify({ type: "ipc-ping" }));
+    if (pongTimeoutId === null) {
+      pongTimeoutId = window.setTimeout(() => {
+        pongTimeoutId = null;
+        // No pong (or any frame) within the window: assume the link is dead and
+        // force a reconnect. close() triggers the "close" handler below.
+        socket?.close();
+      }, PONG_TIMEOUT_MS);
+    }
+  }, HEARTBEAT_INTERVAL_MS);
+}
+
 function ensureSocket(): void {
   if (
     socket &&
@@ -291,22 +330,35 @@ function ensureSocket(): void {
   );
   socket.addEventListener("open", () => {
     flushOutboundQueue();
+    startHeartbeat();
   });
   socket.addEventListener("message", (event) => {
+    // Any inbound frame proves the link is alive; clear the pong watchdog.
+    if (pongTimeoutId !== null) {
+      window.clearTimeout(pongTimeoutId);
+      pongTimeoutId = null;
+    }
+    let message: MainToRendererMessage;
     try {
-      const message = JSON.parse(String(event.data)) as MainToRendererMessage;
-      handleIncomingMessage(message);
+      message = JSON.parse(String(event.data)) as MainToRendererMessage;
     } catch (error) {
       console.error(
         "[electron-stub] failed to parse IPC bridge message",
         error,
       );
+      return;
     }
+    if ((message as { type?: string }).type === "ipc-pong") {
+      return; // heartbeat ack — nothing else to do
+    }
+    handleIncomingMessage(message);
   });
   socket.addEventListener("close", () => {
+    stopHeartbeat();
     scheduleReconnect();
   });
   socket.addEventListener("error", () => {
+    stopHeartbeat();
     scheduleReconnect();
   });
 }

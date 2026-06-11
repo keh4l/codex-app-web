@@ -226,6 +226,9 @@ const AUTH_COOKIE_NAME = "codex_web_auth";
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const LOGIN_FAILURE_WINDOW_MS = 15 * 60 * 1000;
 const LOGIN_MAX_FAILURES_PER_WINDOW = 10;
+// Native ws ping interval to reap half-open dead client connections so they
+// don't accumulate in the broadcast set.
+const WS_KEEPALIVE_INTERVAL_MS = 30 * 1000;
 
 function resolveAuthConfig(): AuthConfig | null {
   const password = process.env.AUTH_PASSWORD ?? "";
@@ -659,7 +662,24 @@ async function startIpcBridgeServer(options: ServerOptions): Promise<void> {
   websocketServer.on("connection", (socket) => {
     sockets.add(socket);
 
+    // Native ws ping/pong to reap half-open dead connections server-side, so a
+    // client that vanished without a TCP close doesn't linger in `sockets`.
+    let isAlive = true;
+    socket.on("pong", () => {
+      isAlive = true;
+    });
+    const keepalive = setInterval(() => {
+      if (!isAlive) {
+        clearInterval(keepalive);
+        socket.terminate();
+        return;
+      }
+      isAlive = false;
+      socket.ping();
+    }, WS_KEEPALIVE_INTERVAL_MS);
+
     socket.on("close", () => {
+      clearInterval(keepalive);
       sockets.delete(socket);
     });
 
@@ -669,6 +689,13 @@ async function startIpcBridgeServer(options: ServerOptions): Promise<void> {
         message = JSON.parse(String(rawData)) as RendererToMainMessage;
       } catch (error) {
         console.error("[ipc-bridge] invalid JSON payload", error);
+        return;
+      }
+
+      if ((message as { type?: string }).type === "ipc-ping") {
+        if (socket.readyState === WebSocket.OPEN) {
+          socket.send(JSON.stringify({ type: "ipc-pong" }));
+        }
         return;
       }
 

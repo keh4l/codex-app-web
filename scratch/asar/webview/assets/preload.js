@@ -12989,23 +12989,55 @@ function scheduleReconnect() {
 		ensureSocket();
 	}, RECONNECT_DELAY_MS);
 }
+function stopHeartbeat() {
+	if (heartbeatIntervalId !== null) {
+		window.clearInterval(heartbeatIntervalId);
+		heartbeatIntervalId = null;
+	}
+	if (pongTimeoutId !== null) {
+		window.clearTimeout(pongTimeoutId);
+		pongTimeoutId = null;
+	}
+}
+function startHeartbeat() {
+	stopHeartbeat();
+	heartbeatIntervalId = window.setInterval(() => {
+		if (!socket || socket.readyState !== WebSocket.OPEN) return;
+		socket.send(JSON.stringify({ type: "ipc-ping" }));
+		if (pongTimeoutId === null) pongTimeoutId = window.setTimeout(() => {
+			pongTimeoutId = null;
+			socket?.close();
+		}, PONG_TIMEOUT_MS);
+	}, HEARTBEAT_INTERVAL_MS);
+}
 function ensureSocket() {
 	if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) return;
 	socket = new WebSocket(`${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.host}/__backend/ipc`);
 	socket.addEventListener("open", () => {
 		flushOutboundQueue();
+		startHeartbeat();
 	});
 	socket.addEventListener("message", (event) => {
+		if (pongTimeoutId !== null) {
+			window.clearTimeout(pongTimeoutId);
+			pongTimeoutId = null;
+		}
+		let message;
 		try {
-			handleIncomingMessage(JSON.parse(String(event.data)));
+			message = JSON.parse(String(event.data));
 		} catch (error) {
 			console.error("[electron-stub] failed to parse IPC bridge message", error);
+			return;
 		}
+		if (message.type === "ipc-pong") return;
+		handleIncomingMessage(message);
 	});
 	socket.addEventListener("close", () => {
+		stopHeartbeat();
 		scheduleReconnect();
 	});
 	socket.addEventListener("error", () => {
+		stopHeartbeat();
 		scheduleReconnect();
 	});
 }
@@ -13065,12 +13097,14 @@ function requestWorkspaceDirectoryEntries(directoryPath) {
 		});
 	});
 }
-var RECONNECT_DELAY_MS, requestCounter, socket, reconnectTimeoutId, outboundQueue, pendingInvokes, pendingDirectoryEntries, rendererListeners, bridgedPorts, themeMediaQuery, mobileMediaQuery, initialSidebarState, electronShim, I18N_LAYER, I18N_LAYER_OVERRIDES, initialRoute, buildFlavor, ipcRenderer, contextBridge, webUtils;
+var RECONNECT_DELAY_MS, HEARTBEAT_INTERVAL_MS, PONG_TIMEOUT_MS, requestCounter, socket, reconnectTimeoutId, heartbeatIntervalId, pongTimeoutId, outboundQueue, pendingInvokes, pendingDirectoryEntries, rendererListeners, bridgedPorts, themeMediaQuery, mobileMediaQuery, initialSidebarState, electronShim, I18N_LAYER, I18N_LAYER_OVERRIDES, initialRoute, buildFlavor, ipcRenderer, contextBridge, webUtils;
 var init_shim = __esmMin((() => {
 	init_routes();
 	init_files();
 	init_workspace_root_dialog();
 	RECONNECT_DELAY_MS = 1e3;
+	HEARTBEAT_INTERVAL_MS = 15e3;
+	PONG_TIMEOUT_MS = 1e4;
 	if (typeof crypto.randomUUID !== "function") crypto.randomUUID = () => {
 		const bytes = crypto.getRandomValues(new Uint8Array(16));
 		bytes[6] = bytes[6] & 15 | 64;
@@ -13089,6 +13123,8 @@ var init_shim = __esmMin((() => {
 	requestCounter = 0;
 	socket = null;
 	reconnectTimeoutId = null;
+	heartbeatIntervalId = null;
+	pongTimeoutId = null;
 	outboundQueue = [];
 	pendingInvokes = /* @__PURE__ */ new Map();
 	pendingDirectoryEntries = /* @__PURE__ */ new Map();
