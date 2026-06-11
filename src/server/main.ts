@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { randomUUID } from "node:crypto";
+import { randomUUID, timingSafeEqual } from "node:crypto";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -209,6 +209,100 @@ function parseServerArgs(args: string[]): ServerOptions {
   };
 }
 
+type AuthConfig = {
+  username: string;
+  password: string;
+  // Random per-boot session token, set as an HttpOnly cookie after a
+  // successful Basic auth. The WebSocket upgrade is validated against the
+  // cookie too, because not every browser re-sends the Authorization header
+  // on the upgrade request. Restarting the server invalidates the cookie,
+  // which is fine — the browser silently re-authenticates via Basic.
+  cookieToken: string;
+};
+
+const AUTH_COOKIE_NAME = "codex_web_auth";
+
+function resolveAuthConfig(): AuthConfig | null {
+  const password = process.env.AUTH_PASSWORD ?? "";
+  if (!password) {
+    return null;
+  }
+  return {
+    username: process.env.AUTH_USERNAME || "codex",
+    password,
+    cookieToken: randomUUID() + randomUUID(),
+  };
+}
+
+function safeEqual(left: string, right: string): boolean {
+  const leftBuffer = Buffer.from(left);
+  const rightBuffer = Buffer.from(right);
+  if (leftBuffer.length !== rightBuffer.length) {
+    return false;
+  }
+  return timingSafeEqual(leftBuffer, rightBuffer);
+}
+
+function hasValidBasicCredentials(
+  auth: AuthConfig,
+  authorizationHeader: string | undefined,
+): boolean {
+  if (!authorizationHeader?.startsWith("Basic ")) {
+    return false;
+  }
+  let decoded: string;
+  try {
+    decoded = Buffer.from(authorizationHeader.slice(6), "base64").toString(
+      "utf8",
+    );
+  } catch {
+    return false;
+  }
+  const separatorIndex = decoded.indexOf(":");
+  if (separatorIndex < 0) {
+    return false;
+  }
+  const usernameMatches = safeEqual(
+    decoded.slice(0, separatorIndex),
+    auth.username,
+  );
+  const passwordMatches = safeEqual(
+    decoded.slice(separatorIndex + 1),
+    auth.password,
+  );
+  return usernameMatches && passwordMatches;
+}
+
+function hasValidAuthCookie(
+  auth: AuthConfig,
+  cookieHeader: string | undefined,
+): boolean {
+  if (!cookieHeader) {
+    return false;
+  }
+  for (const part of cookieHeader.split(";")) {
+    const trimmed = part.trim();
+    if (!trimmed.startsWith(`${AUTH_COOKIE_NAME}=`)) {
+      continue;
+    }
+    return safeEqual(
+      trimmed.slice(AUTH_COOKIE_NAME.length + 1),
+      auth.cookieToken,
+    );
+  }
+  return false;
+}
+
+function isAuthorizedRequest(
+  auth: AuthConfig,
+  headers: { authorization?: string; cookie?: string },
+): boolean {
+  return (
+    hasValidBasicCredentials(auth, headers.authorization) ||
+    hasValidAuthCookie(auth, headers.cookie)
+  );
+}
+
 function getIpcMainBridgeState(): IpcMainBridgeState {
   const globals = globalThis as typeof globalThis & {
     __codexElectronIpcBridge?: IpcMainBridgeState;
@@ -294,9 +388,31 @@ function ensureElectronLikeProcessContext(): void {
 
 async function startIpcBridgeServer(options: ServerOptions): Promise<void> {
   const bridgeState = getIpcMainBridgeState();
+  const auth = resolveAuthConfig();
   const app = Fastify({ logger: false });
   const websocketServer = new WebSocketServer({ noServer: true });
   const sockets = new Set<WebSocket>();
+
+  if (auth) {
+    // Must be registered before any route/plugin so it covers them all.
+    app.addHook("onRequest", async (request, reply) => {
+      if (hasValidBasicCredentials(auth, request.headers.authorization)) {
+        // No Secure flag: codex-web is commonly served over plain http.
+        reply.header(
+          "set-cookie",
+          `${AUTH_COOKIE_NAME}=${auth.cookieToken}; Path=/; HttpOnly; SameSite=Lax`,
+        );
+        return;
+      }
+      if (hasValidAuthCookie(auth, request.headers.cookie)) {
+        return;
+      }
+      return reply
+        .code(401)
+        .header("www-authenticate", 'Basic realm="codex-web", charset="UTF-8"')
+        .send({ error: "Unauthorized" });
+    });
+  }
 
   await app.register(fastifyMultipart, {
     limits: {
@@ -365,6 +481,20 @@ async function startIpcBridgeServer(options: ServerOptions): Promise<void> {
     const host = request.headers.host ?? "localhost";
     const url = new URL(requestUrl, `http://${host}`);
     if (url.pathname !== "/__backend/ipc") {
+      socket.destroy();
+      return;
+    }
+
+    if (
+      auth &&
+      !isAuthorizedRequest(auth, {
+        authorization: request.headers.authorization,
+        cookie: request.headers.cookie,
+      })
+    ) {
+      socket.write(
+        "HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n",
+      );
       socket.destroy();
       return;
     }
@@ -485,6 +615,17 @@ async function startIpcBridgeServer(options: ServerOptions): Promise<void> {
 
   await app.listen({ host: options.host, port: options.port });
   console.log(`IPC bridge listening at ws://${options.host}:${options.port}`);
+  if (auth) {
+    console.log(
+      `HTTP Basic auth enabled (user: ${auth.username}); set AUTH_PASSWORD="" to disable`,
+    );
+  } else if (options.host !== "127.0.0.1" && options.host !== "localhost") {
+    console.warn(
+      `WARNING: listening on ${options.host} with no authentication. ` +
+        `Anyone who can reach this port can run codex as you. ` +
+        `Set AUTH_PASSWORD in .env to require a login.`,
+    );
+  }
 
   ensureElectronLikeProcessContext();
   installModuleAliasHook();

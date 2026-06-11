@@ -186,7 +186,24 @@ CODEX_CLI_PATH="/绝对路径/codex-app-web/scripts/codex_remote_proxy"
 
 只在受信任的网络上运行 `codex-web`。要把任何能访问到 `codex-web` 服务器的人，都视为能够以运行该服务器的同一用户身份在主机上操作 codex 的人。
 
-如果你需要认证（authn）或授权（authz），请在 `codex-web` 之外实现：通过 wireguard、tailscale 或 ssh 隧道进行代理，并在前面放置一个认证网关或反向代理。
+### 内置认证（HTTP Basic Auth）
+
+在 `.env` 中设置密码即可要求登录（覆盖所有页面请求与后端 WebSocket）：
+
+```bash
+AUTH_USERNAME="codex"   # 可选，默认 codex
+AUTH_PASSWORD="一个足够长的随机密码"
+```
+
+重启服务后，浏览器访问会弹出原生的账号密码登录框。留空 `AUTH_PASSWORD` 则不启用认证（与之前行为一致）。
+
+注意局限：
+
+- Basic Auth 经纯 http 传输时凭据是 base64 明文。在公网上使用请配合 https
+  反向代理（caddy / nginx + 证书），或走 wireguard / tailscale / ssh 隧道。
+- 没有防爆破限速。请使用长随机密码，而不是弱口令。
+
+更强的隔离仍建议在 `codex-web` 之外实现：wireguard、tailscale、ssh 隧道，或带认证的反向代理。
 
 能够访问 web UI 的人可能可以：
 
