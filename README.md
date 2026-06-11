@@ -186,7 +186,7 @@ CODEX_CLI_PATH="/绝对路径/codex-app-web/scripts/codex_remote_proxy"
 
 只在受信任的网络上运行 `codex-web`。要把任何能访问到 `codex-web` 服务器的人，都视为能够以运行该服务器的同一用户身份在主机上操作 codex 的人。
 
-### 内置认证（HTTP Basic Auth）
+### 内置认证（登录页）
 
 在 `.env` 中设置密码即可要求登录（覆盖所有页面请求与后端 WebSocket）：
 
@@ -195,13 +195,15 @@ AUTH_USERNAME="codex"   # 可选，默认 codex
 AUTH_PASSWORD="一个足够长的随机密码"
 ```
 
-重启服务后，浏览器访问会弹出原生的账号密码登录框。留空 `AUTH_PASSWORD` 则不启用认证（与之前行为一致）。
+重启服务后，未登录的浏览器访问会跳转到自带的登录页（`/__auth/login`）。
+登录成功后下发 30 天有效的会话 cookie（HMAC 签名、HttpOnly），服务重启
+不掉线；修改密码会让已有会话全部失效。访问 `/__auth/logout` 可退出登录。
+留空 `AUTH_PASSWORD` 则不启用认证（与之前行为一致）。
 
-注意局限：
-
-- Basic Auth 经纯 http 传输时凭据是 base64 明文。在公网上使用请配合 https
+- 脚本 / curl 无需走登录页，直接带 HTTP Basic 头即可：`curl -u 用户名:密码`。
+- 登录接口带按 IP 防爆破限制（15 分钟内最多失败 10 次）。
+- 凭据与 cookie 经纯 http 传输时是明文。在公网上使用请配合 https
   反向代理（caddy / nginx + 证书），或走 wireguard / tailscale / ssh 隧道。
-- 没有防爆破限速。请使用长随机密码，而不是弱口令。
 
 更强的隔离仍建议在 `codex-web` 之外实现：wireguard、tailscale、ssh 隧道，或带认证的反向代理。
 

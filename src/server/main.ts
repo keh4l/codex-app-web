@@ -1,6 +1,11 @@
 #!/usr/bin/env node
 
-import { randomUUID, timingSafeEqual } from "node:crypto";
+import {
+  createHash,
+  createHmac,
+  randomUUID,
+  timingSafeEqual,
+} from "node:crypto";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -212,26 +217,58 @@ function parseServerArgs(args: string[]): ServerOptions {
 type AuthConfig = {
   username: string;
   password: string;
-  // Random per-boot session token, set as an HttpOnly cookie after a
-  // successful Basic auth. The WebSocket upgrade is validated against the
-  // cookie too, because not every browser re-sends the Authorization header
-  // on the upgrade request. Restarting the server invalidates the cookie,
-  // which is fine — the browser silently re-authenticates via Basic.
-  cookieToken: string;
+  // HMAC key for session cookies, derived from the credentials so sessions
+  // survive server restarts and are invalidated by a password change.
+  sessionKey: Buffer;
 };
 
 const AUTH_COOKIE_NAME = "codex_web_auth";
+const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+const LOGIN_FAILURE_WINDOW_MS = 15 * 60 * 1000;
+const LOGIN_MAX_FAILURES_PER_WINDOW = 10;
 
 function resolveAuthConfig(): AuthConfig | null {
   const password = process.env.AUTH_PASSWORD ?? "";
   if (!password) {
     return null;
   }
+  const username = process.env.AUTH_USERNAME || "codex";
   return {
-    username: process.env.AUTH_USERNAME || "codex",
+    username,
     password,
-    cookieToken: randomUUID() + randomUUID(),
+    sessionKey: createHash("sha256")
+      .update(`codex-web-auth-v1:${username}:${password}`)
+      .digest(),
   };
+}
+
+function createSessionToken(auth: AuthConfig): string {
+  const expiresAt = Date.now() + SESSION_TTL_MS;
+  const signature = createHmac("sha256", auth.sessionKey)
+    .update(String(expiresAt))
+    .digest("hex");
+  return `${expiresAt}.${signature}`;
+}
+
+function verifySessionToken(auth: AuthConfig, token: string): boolean {
+  const separatorIndex = token.indexOf(".");
+  if (separatorIndex < 0) {
+    return false;
+  }
+  const expiresAtRaw = token.slice(0, separatorIndex);
+  const expiresAt = Number(expiresAtRaw);
+  if (!Number.isFinite(expiresAt) || expiresAt < Date.now()) {
+    return false;
+  }
+  const expectedSignature = createHmac("sha256", auth.sessionKey)
+    .update(expiresAtRaw)
+    .digest("hex");
+  return safeEqual(token.slice(separatorIndex + 1), expectedSignature);
+}
+
+function sessionCookie(token: string): string {
+  // No Secure flag: codex-web is commonly served over plain http.
+  return `${AUTH_COOKIE_NAME}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${Math.floor(SESSION_TTL_MS / 1000)}`;
 }
 
 function safeEqual(left: string, right: string): boolean {
@@ -285,10 +322,7 @@ function hasValidAuthCookie(
     if (!trimmed.startsWith(`${AUTH_COOKIE_NAME}=`)) {
       continue;
     }
-    return safeEqual(
-      trimmed.slice(AUTH_COOKIE_NAME.length + 1),
-      auth.cookieToken,
-    );
+    return verifySessionToken(auth, trimmed.slice(AUTH_COOKIE_NAME.length + 1));
   }
   return false;
 }
@@ -394,23 +428,103 @@ async function startIpcBridgeServer(options: ServerOptions): Promise<void> {
   const sockets = new Set<WebSocket>();
 
   if (auth) {
+    const loginFailures = new Map<
+      string,
+      { count: number; windowStart: number }
+    >();
+
+    const isLoginRateLimited = (ip: string): boolean => {
+      const entry = loginFailures.get(ip);
+      if (!entry) {
+        return false;
+      }
+      if (Date.now() - entry.windowStart > LOGIN_FAILURE_WINDOW_MS) {
+        loginFailures.delete(ip);
+        return false;
+      }
+      return entry.count >= LOGIN_MAX_FAILURES_PER_WINDOW;
+    };
+
+    const recordLoginFailure = (ip: string): void => {
+      const entry = loginFailures.get(ip);
+      if (!entry || Date.now() - entry.windowStart > LOGIN_FAILURE_WINDOW_MS) {
+        loginFailures.set(ip, { count: 1, windowStart: Date.now() });
+        return;
+      }
+      entry.count += 1;
+    };
+
     // Must be registered before any route/plugin so it covers them all.
     app.addHook("onRequest", async (request, reply) => {
-      if (hasValidBasicCredentials(auth, request.headers.authorization)) {
-        // No Secure flag: codex-web is commonly served over plain http.
-        reply.header(
-          "set-cookie",
-          `${AUTH_COOKIE_NAME}=${auth.cookieToken}; Path=/; HttpOnly; SameSite=Lax`,
-        );
+      const requestPath = request.url.split("?")[0];
+      if (requestPath === "/__auth/login" || requestPath === "/__auth/logout") {
         return;
       }
-      if (hasValidAuthCookie(auth, request.headers.cookie)) {
+      // Browsers fetch the PWA manifest without credentials; it only holds
+      // the app name and icon paths, so exempt it instead of letting every
+      // page load log a 401.
+      if (requestPath === "/manifest.json") {
         return;
       }
+      if (isAuthorizedRequest(auth, request.headers)) {
+        return;
+      }
+      const wantsHtml = (request.headers.accept ?? "").includes("text/html");
+      if (request.method === "GET" && wantsHtml) {
+        return reply
+          .code(302)
+          .header(
+            "location",
+            `/__auth/login?next=${encodeURIComponent(request.url)}`,
+          )
+          .send();
+      }
+      return reply.code(401).send({ error: "Unauthorized" });
+    });
+
+    const loginPagePath = path.resolve(__dirname, "login.html");
+
+    app.get("/__auth/login", async (request, reply) => {
+      if (isAuthorizedRequest(auth, request.headers)) {
+        return reply.code(302).header("location", "/").send();
+      }
+      const page = await fs.readFile(loginPagePath, "utf8");
       return reply
-        .code(401)
-        .header("www-authenticate", 'Basic realm="codex-web", charset="UTF-8"')
-        .send({ error: "Unauthorized" });
+        .type("text/html; charset=utf-8")
+        .send(page.replaceAll("__DEFAULT_USERNAME__", auth.username));
+    });
+
+    app.post("/__auth/login", async (request, reply) => {
+      if (isLoginRateLimited(request.ip)) {
+        return reply.code(429).send({ error: "too many attempts" });
+      }
+      const body = request.body as {
+        username?: unknown;
+        password?: unknown;
+      } | null;
+      const username = typeof body?.username === "string" ? body.username : "";
+      const password = typeof body?.password === "string" ? body.password : "";
+      const usernameMatches = safeEqual(username, auth.username);
+      const passwordMatches = safeEqual(password, auth.password);
+      if (!usernameMatches || !passwordMatches) {
+        recordLoginFailure(request.ip);
+        return reply.code(401).send({ error: "invalid credentials" });
+      }
+      loginFailures.delete(request.ip);
+      return reply
+        .header("set-cookie", sessionCookie(createSessionToken(auth)))
+        .send({ ok: true });
+    });
+
+    app.get("/__auth/logout", async (_request, reply) => {
+      return reply
+        .code(302)
+        .header(
+          "set-cookie",
+          `${AUTH_COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`,
+        )
+        .header("location", "/__auth/login")
+        .send();
     });
   }
 
@@ -617,7 +731,7 @@ async function startIpcBridgeServer(options: ServerOptions): Promise<void> {
   console.log(`IPC bridge listening at ws://${options.host}:${options.port}`);
   if (auth) {
     console.log(
-      `HTTP Basic auth enabled (user: ${auth.username}); set AUTH_PASSWORD="" to disable`,
+      `Auth enabled: login page at /__auth/login (user: ${auth.username}); set AUTH_PASSWORD="" to disable`,
     );
   } else if (options.host !== "127.0.0.1" && options.host !== "localhost") {
     console.warn(
