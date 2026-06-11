@@ -280,6 +280,19 @@ function safeEqual(left: string, right: string): boolean {
   return timingSafeEqual(leftBuffer, rightBuffer);
 }
 
+// AUTH_USERNAME is operator-controlled but still interpolated into the login
+// page's `value="..."` attribute. Escape it so an unusual username can't break
+// out of the attribute (defense-in-depth / avoids a broken page for usernames
+// containing quotes or angle brackets).
+function escapeHtmlAttribute(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 function hasValidBasicCredentials(
   auth: AuthConfig,
   authorizationHeader: string | undefined,
@@ -446,6 +459,17 @@ async function startIpcBridgeServer(options: ServerOptions): Promise<void> {
     };
 
     const recordLoginFailure = (ip: string): void => {
+      // Opportunistically drop expired windows so a flood of distinct source
+      // IPs can't grow this map without bound (expired entries are otherwise
+      // only purged when that same IP tries again).
+      if (loginFailures.size > 1024) {
+        const cutoff = Date.now() - LOGIN_FAILURE_WINDOW_MS;
+        for (const [key, value] of loginFailures) {
+          if (value.windowStart < cutoff) {
+            loginFailures.delete(key);
+          }
+        }
+      }
       const entry = loginFailures.get(ip);
       if (!entry || Date.now() - entry.windowStart > LOGIN_FAILURE_WINDOW_MS) {
         loginFailures.set(ip, { count: 1, windowStart: Date.now() });
@@ -491,7 +515,12 @@ async function startIpcBridgeServer(options: ServerOptions): Promise<void> {
       const page = await fs.readFile(loginPagePath, "utf8");
       return reply
         .type("text/html; charset=utf-8")
-        .send(page.replaceAll("__DEFAULT_USERNAME__", auth.username));
+        .send(
+          page.replaceAll(
+            "__DEFAULT_USERNAME__",
+            escapeHtmlAttribute(auth.username),
+          ),
+        );
     });
 
     app.post("/__auth/login", async (request, reply) => {

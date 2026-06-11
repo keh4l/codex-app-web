@@ -173,10 +173,21 @@
           // fall through to the generic error below
         }
         if (response && response.ok) {
-          const next = new URLSearchParams(location.search).get("next") || "/";
-          location.replace(
-            next.startsWith("/") && !next.startsWith("//") ? next : "/",
-          );
+          // Resolve `next` against our own origin and only honor same-origin
+          // targets. A naive startsWith("/") check is bypassable: the browser
+          // normalizes backslashes, so "/\evil.com" parses as "//evil.com"
+          // (an off-site redirect).
+          const raw = new URLSearchParams(location.search).get("next") || "/";
+          let dest = "/";
+          try {
+            const target = new URL(raw, location.origin);
+            if (target.origin === location.origin) {
+              dest = target.pathname + target.search + target.hash;
+            }
+          } catch {
+            // malformed next; fall back to "/"
+          }
+          location.replace(dest);
           return;
         }
         submitButton.disabled = false;
