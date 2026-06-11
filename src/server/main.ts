@@ -283,19 +283,6 @@ function safeEqual(left: string, right: string): boolean {
   return timingSafeEqual(leftBuffer, rightBuffer);
 }
 
-// AUTH_USERNAME is operator-controlled but still interpolated into the login
-// page's `value="..."` attribute. Escape it so an unusual username can't break
-// out of the attribute (defense-in-depth / avoids a broken page for usernames
-// containing quotes or angle brackets).
-function escapeHtmlAttribute(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
-
 function hasValidBasicCredentials(
   auth: AuthConfig,
   authorizationHeader: string | undefined,
@@ -516,14 +503,7 @@ async function startIpcBridgeServer(options: ServerOptions): Promise<void> {
         return reply.code(302).header("location", "/").send();
       }
       const page = await fs.readFile(loginPagePath, "utf8");
-      return reply
-        .type("text/html; charset=utf-8")
-        .send(
-          page.replaceAll(
-            "__DEFAULT_USERNAME__",
-            escapeHtmlAttribute(auth.username),
-          ),
-        );
+      return reply.type("text/html; charset=utf-8").send(page);
     });
 
     app.post("/__auth/login", async (request, reply) => {
