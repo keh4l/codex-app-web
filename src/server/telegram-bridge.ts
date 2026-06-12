@@ -11,6 +11,8 @@ import { setTimeout as delay } from "node:timers/promises";
 import {
   setTimeout as setTimer,
   clearTimeout as clearTimer,
+  setInterval as setIntervalTimer,
+  clearInterval as clearIntervalTimer,
 } from "node:timers";
 import type { AppServerLike, AppServerNotification } from "./app-server";
 
@@ -48,6 +50,8 @@ export type TelegramBridgeOptions = {
   defaultCwd: string;
   /** 仅用于 /status 展示。 */
   sandboxMode: string;
+  /** 是否启用 item 级流式（typing + editMessageText 实时更新）。 */
+  streaming: boolean;
   /** 重启上线通知用的已知 chatId。 */
   knownChatIds: number[];
   /** 见到新 chat 时回调（用于持久化）。 */
@@ -60,6 +64,13 @@ const POLL_TIMEOUT_SECONDS = 45;
 // 永久挂起导致 pollLoop 静默卡死（跨境网络已知痛点）。
 const POLL_HTTP_TIMEOUT_MS = (POLL_TIMEOUT_SECONDS + 15) * 1000;
 const POLL_ERROR_BACKOFF_MS = 1500;
+
+// 流式：turn 进行中每隔多久重发一次 typing 状态（Telegram typing 约 5 秒过期）。
+const TYPING_INTERVAL_MS = 4000;
+// 流式编辑节流：两次 editMessageText 的最小间隔，避免触发 Telegram 限流。
+const STREAM_EDIT_MIN_INTERVAL_MS = 2500;
+// 流式占位 / 进度消息的初始文本。
+const STREAM_PLACEHOLDER = "⏳ 正在处理…";
 
 const BOT_COMMANDS = [
   { command: "start", description: "快速开始 + thread 选择器" },
@@ -98,12 +109,33 @@ const AbortControllerCtor = (
   globalThis as unknown as { AbortController: new () => AbortLike }
 ).AbortController;
 
+/** turn 进行中的流式编辑会话（per-thread，针对发起该 turn 的 chat）。 */
+type StreamSession = {
+  chatId: number;
+  messageId: number;
+  /** 已累积的 agentMessage 文本（codex 可能分多段 item）。 */
+  accumulatedText: string;
+  /** 当前活动标签（尚无 agentMessage 文本时显示）。 */
+  activity: string;
+  /** 上次实际编辑发出的文本（去重，避免 "message is not modified"）。 */
+  lastEditedText: string;
+  /** 上次编辑时间戳（节流用）。 */
+  lastEditAt: number;
+  /** 节流待发的编辑定时器。 */
+  editTimer: ReturnType<typeof setTimer> | null;
+  /** typing 状态重发定时器。 */
+  typingTimer: ReturnType<typeof setIntervalTimer> | null;
+  /** 定稿中标记，阻止后续中途编辑覆盖最终结果。 */
+  finalizing: boolean;
+};
+
 export class TelegramBridge {
   private readonly token: string;
   private readonly allowedUserIds: Set<number>;
   private readonly allowAllUsers: boolean;
   private readonly defaultCwd: string;
   private readonly sandboxMode: string;
+  private readonly streaming: boolean;
   private readonly onChatSeen: ((chatId: number) => void) | undefined;
 
   private nextUpdateOffset = 0;
@@ -122,6 +154,8 @@ export class TelegramBridge {
   private readonly knownChatIds: number[];
   // 已触发过 onChatSeen 的 chat，避免重复持久化 IO。
   private readonly seenChatIds: Set<number>;
+  // turn 进行中的流式编辑会话（threadId → session）。
+  private readonly streamSessions = new Map<string, StreamSession>();
 
   constructor(
     private readonly appServer: AppServerLike,
@@ -132,6 +166,7 @@ export class TelegramBridge {
     this.allowAllUsers = options.allowAllUsers;
     this.defaultCwd = options.defaultCwd;
     this.sandboxMode = options.sandboxMode;
+    this.streaming = options.streaming;
     this.onChatSeen = options.onChatSeen;
     this.knownChatIds = options.knownChatIds;
     this.seenChatIds = new Set(options.knownChatIds);
@@ -151,6 +186,9 @@ export class TelegramBridge {
     this.running = false;
     this.unsubscribe?.();
     this.unsubscribe = null;
+    for (const threadId of [...this.streamSessions.keys()]) {
+      this.endStreamSession(threadId);
+    }
   }
 
   // --- 长轮询 ---------------------------------------------------------------
@@ -336,14 +374,20 @@ export class TelegramBridge {
         threadId = await this.startThread();
         this.bindChatToThread(chatId, threadId);
       }
+      // 先开流式（占位 + typing）再发 turn —— 保证 turn/completed 一定能找到
+      // session，避免极快 turn 抢在 session 建立前完成而留下孤儿占位消息。
+      if (this.streaming) {
+        await this.beginStreamSession(threadId, chatId);
+      }
       await this.startTurn(threadId, text);
-      // 不立即回复 —— 等 turn/completed 通知再回发 assistant 消息。
+      // turn 已开始；turn/completed 通知会定稿（非流式时则一次性发）。
     } catch (error) {
       this.lastError = errText(error);
-      await this.sendMessage(
-        chatId,
-        `⚠️ 发送失败：${errText(error)}\ncodex 后端可能已断开，请稍后重试。`,
-      );
+      const message = `⚠️ 发送失败：${errText(error)}\ncodex 后端可能已断开，请稍后重试。`;
+      // 已开流式则把占位消息定稿为错误；否则直接发一条。
+      if (!threadId || !(await this.failStreamSession(threadId, message))) {
+        await this.sendMessage(chatId, message);
+      }
     }
   }
 
@@ -481,10 +525,129 @@ export class TelegramBridge {
   // --- turn/completed → 回发 assistant -------------------------------------
 
   private handleNotification(notification: AppServerNotification): void {
-    if (notification.method !== "turn/completed") {
+    const method = notification.method;
+    if (method === "item/started" || method === "item/completed") {
+      this.handleItemNotification(method, notification.params);
       return;
     }
-    const params = notification.params as Record<string, unknown> | null;
+    if (method === "turn/completed") {
+      this.handleTurnCompleted(notification.params);
+    }
+  }
+
+  // --- 流式：item 级实时编辑 ------------------------------------------------
+
+  /** turn 已开始：发占位消息 + 启动 typing，建立流式 session。 */
+  private async beginStreamSession(
+    threadId: string,
+    chatId: number,
+  ): Promise<void> {
+    // 同 thread 上一轮残留的 session 先收尾，避免定时器泄漏。
+    this.endStreamSession(threadId);
+    let messageId: number | null;
+    try {
+      messageId = await this.sendPlainMessageReturningId(
+        chatId,
+        STREAM_PLACEHOLDER,
+      );
+    } catch (error) {
+      // 占位消息发送失败 → 放弃流式，turn/completed 仍会兜底一次性发完整回复。
+      this.lastError = errText(error);
+      return;
+    }
+    if (messageId == null) {
+      return;
+    }
+    const session: StreamSession = {
+      chatId,
+      messageId,
+      accumulatedText: "",
+      activity: STREAM_PLACEHOLDER,
+      lastEditedText: STREAM_PLACEHOLDER,
+      lastEditAt: Date.now(),
+      editTimer: null,
+      typingTimer: setIntervalTimer(() => {
+        void this.sendChatAction(chatId, "typing");
+      }, TYPING_INTERVAL_MS),
+      finalizing: false,
+    };
+    this.streamSessions.set(threadId, session);
+    // 立即发一次 typing，不等第一个 interval。
+    void this.sendChatAction(chatId, "typing");
+  }
+
+  private handleItemNotification(method: string, rawParams: unknown): void {
+    const params = rawParams as Record<string, unknown> | null;
+    const threadId = extractThreadId(params);
+    if (!threadId) {
+      return;
+    }
+    const session = this.streamSessions.get(threadId);
+    if (!session || session.finalizing) {
+      return;
+    }
+    const item = (params?.["item"] ?? null) as Record<string, unknown> | null;
+    const itemType =
+      typeof item?.["type"] === "string" ? (item["type"] as string) : "";
+    if (method === "item/completed" && itemType === "agentMessage") {
+      const text =
+        typeof item?.["text"] === "string"
+          ? (item["text"] as string).trim()
+          : "";
+      if (text) {
+        session.accumulatedText = session.accumulatedText
+          ? `${session.accumulatedText}\n\n${text}`
+          : text;
+      }
+    } else {
+      session.activity = activityLabel(itemType);
+    }
+    this.scheduleStreamEdit(threadId);
+  }
+
+  /** 节流安排一次进度编辑。 */
+  private scheduleStreamEdit(threadId: string): void {
+    const session = this.streamSessions.get(threadId);
+    if (!session || session.finalizing) {
+      return;
+    }
+    const elapsed = Date.now() - session.lastEditAt;
+    if (elapsed >= STREAM_EDIT_MIN_INTERVAL_MS) {
+      void this.flushStreamEdit(threadId);
+      return;
+    }
+    if (!session.editTimer) {
+      session.editTimer = setTimer(() => {
+        session.editTimer = null;
+        void this.flushStreamEdit(threadId);
+      }, STREAM_EDIT_MIN_INTERVAL_MS - elapsed);
+    }
+  }
+
+  private async flushStreamEdit(threadId: string): Promise<void> {
+    const session = this.streamSessions.get(threadId);
+    if (!session || session.finalizing) {
+      return;
+    }
+    const text = renderStreamProgress(session);
+    if (text === session.lastEditedText) {
+      return;
+    }
+    session.lastEditedText = text;
+    session.lastEditAt = Date.now();
+    // 中途用纯文本编辑（HTML 标签在累积过程中可能被截断成非法）；定稿才用 HTML。
+    try {
+      await this.editMessageText(session.chatId, session.messageId, text, null);
+    } catch (error) {
+      const message = errText(error);
+      if (!message.includes("not modified")) {
+        console.error(`[telegram] stream edit failed: ${message}`);
+      }
+    }
+  }
+
+  private handleTurnCompleted(rawParams: unknown): void {
+    const params = rawParams as Record<string, unknown> | null;
     const threadId = extractThreadId(params);
     const turnId = extractTurnId(params);
     if (!threadId) {
@@ -492,41 +655,167 @@ export class TelegramBridge {
     }
     const chatIds = this.chatIdsByThreadId.get(threadId);
     if (!chatIds || chatIds.size === 0) {
+      this.endStreamSession(threadId);
       return;
     }
-    // 用 turnId 去重（同一 turn 可能被多次通知）。
+    // turnId 去重（同一 turn 可能被多次通知）。
     if (turnId) {
       if (this.lastForwardedTurnByThreadId.get(threadId) === turnId) {
         return;
       }
       this.lastForwardedTurnByThreadId.set(threadId, turnId);
     }
-    void this.forwardLatestAssistantMessage(threadId, [...chatIds]);
+    const turn = (params?.["turn"] ?? null) as Record<string, unknown> | null;
+    const turnError =
+      turn?.["status"] === "failed" ? errText(turn?.["error"]) : "";
+    void this.finalizeTurn(threadId, [...chatIds], turnError);
   }
 
-  private async forwardLatestAssistantMessage(
+  private async finalizeTurn(
     threadId: string,
     chatIds: number[],
+    turnError: string,
   ): Promise<void> {
-    let reply: string | null;
+    let reply: string | null = null;
     try {
       reply = await this.readLatestAssistantMessage(threadId);
     } catch (error) {
       this.lastError = errText(error);
       console.error(`[telegram] thread/read failed: ${this.lastError}`);
+    }
+
+    const session = this.streamSessions.get(threadId);
+    if (session) {
+      session.finalizing = true;
+      if (session.editTimer) {
+        clearTimer(session.editTimer);
+        session.editTimer = null;
+      }
+      this.stopTyping(session);
+      const finalText =
+        reply ||
+        session.accumulatedText ||
+        (turnError ? `⚠️ 任务失败：${turnError}` : "（codex 未返回文本回复）");
+      await this.finalizeStreamMessage(session, finalText);
+      this.streamSessions.delete(threadId);
+      if (reply) {
+        this.lastForwardedTextByThreadId.set(threadId, reply);
+      }
+      // 同一 thread 上的其他 chat（非本轮发起者，罕见）走老逻辑各自新发。
+      const others = chatIds.filter((id) => id !== session.chatId);
+      if (reply && others.length > 0) {
+        for (const id of others) {
+          await this.sendMessage(id, reply);
+        }
+      }
       return;
     }
+
+    // 无流式 session（流式关闭 / 占位失败）→ 一次性发完整回复。
     if (!reply) {
+      if (turnError) {
+        for (const id of chatIds) {
+          await this.sendMessage(id, `⚠️ 任务失败：${turnError}`);
+        }
+      }
       return;
     }
-    // 内容级兜底去重：turnId 缺失或同一回复被重复通知时，避免重复发送。
     if (this.lastForwardedTextByThreadId.get(threadId) === reply) {
       return;
     }
     this.lastForwardedTextByThreadId.set(threadId, reply);
-    for (const chatId of chatIds) {
-      await this.sendMessage(chatId, reply);
+    for (const id of chatIds) {
+      await this.sendMessage(id, reply);
     }
+  }
+
+  /** 把进度消息定稿为最终回复：第一片编辑进占位消息，超长余片新发。 */
+  private async finalizeStreamMessage(
+    session: StreamSession,
+    finalText: string,
+  ): Promise<void> {
+    const chunks = splitTelegramText(finalText);
+    if (chunks.length === 0) {
+      await this.editMessageHtml(
+        session.chatId,
+        session.messageId,
+        "（无文本回复）",
+      );
+      return;
+    }
+    const [first, ...rest] = chunks;
+    await this.editMessageHtml(session.chatId, session.messageId, first ?? "");
+    for (const chunk of rest) {
+      await this.sendMessage(session.chatId, chunk);
+    }
+  }
+
+  /** 用 HTML 编辑消息；失败回退纯文本编辑。 */
+  private async editMessageHtml(
+    chatId: number,
+    messageId: number,
+    text: string,
+  ): Promise<void> {
+    try {
+      await this.editMessageText(
+        chatId,
+        messageId,
+        renderMarkdownToTelegramHtml(text),
+        "HTML",
+      );
+    } catch {
+      try {
+        await this.editMessageText(chatId, messageId, text, null);
+      } catch (error) {
+        const message = errText(error);
+        if (!message.includes("not modified")) {
+          this.lastError = message;
+          console.error(`[telegram] finalize edit failed: ${message}`);
+        }
+      }
+    }
+  }
+
+  private stopTyping(session: StreamSession): void {
+    if (session.typingTimer) {
+      clearIntervalTimer(session.typingTimer);
+      session.typingTimer = null;
+    }
+  }
+
+  private endStreamSession(threadId: string): void {
+    const session = this.streamSessions.get(threadId);
+    if (!session) {
+      return;
+    }
+    if (session.editTimer) {
+      clearTimer(session.editTimer);
+    }
+    this.stopTyping(session);
+    this.streamSessions.delete(threadId);
+  }
+
+  /**
+   * 流式 session 收尾为一条错误消息（startTurn 失败等）。返回是否处理了 session：
+   * false 表示当前无 session，调用方应自行发送错误。
+   */
+  private async failStreamSession(
+    threadId: string,
+    message: string,
+  ): Promise<boolean> {
+    const session = this.streamSessions.get(threadId);
+    if (!session) {
+      return false;
+    }
+    session.finalizing = true;
+    if (session.editTimer) {
+      clearTimer(session.editTimer);
+      session.editTimer = null;
+    }
+    this.stopTyping(session);
+    this.streamSessions.delete(threadId);
+    await this.editMessageHtml(session.chatId, session.messageId, message);
+    return true;
   }
 
   private async readLatestAssistantMessage(
@@ -734,6 +1023,44 @@ export class TelegramBridge {
     }
   }
 
+  private async sendChatAction(chatId: number, action: string): Promise<void> {
+    try {
+      await this.callTelegram("sendChatAction", { chat_id: chatId, action });
+    } catch {
+      // typing 状态发送失败无碍，忽略。
+    }
+  }
+
+  /** 发送纯文本消息并返回 message_id（流式占位消息用）。 */
+  private async sendPlainMessageReturningId(
+    chatId: number,
+    text: string,
+  ): Promise<number | null> {
+    const result = await this.callTelegram("sendMessage", {
+      chat_id: chatId,
+      text,
+    });
+    const messageId = (result as { message_id?: number } | null)?.message_id;
+    return typeof messageId === "number" ? messageId : null;
+  }
+
+  private async editMessageText(
+    chatId: number,
+    messageId: number,
+    text: string,
+    parseMode: "HTML" | null,
+  ): Promise<void> {
+    const payload: Record<string, unknown> = {
+      chat_id: chatId,
+      message_id: messageId,
+      text,
+    };
+    if (parseMode) {
+      payload["parse_mode"] = parseMode;
+    }
+    await this.callTelegram("editMessageText", payload);
+  }
+
   private async setMyCommands(): Promise<void> {
     try {
       await this.callTelegram("setMyCommands", { commands: BOT_COMMANDS });
@@ -911,4 +1238,37 @@ function isThreadNotFoundError(error: unknown): boolean {
     message.includes("thread not found") ||
     message.includes("no rollout found for thread id")
   );
+}
+
+// item.type → turn 进行中的活动标签。codex 流式是 item 级（非逐字），用类型给个
+// 友好的"正在做什么"提示。未知类型回退到通用占位。
+function activityLabel(itemType: string): string {
+  switch (itemType) {
+    case "agentMessage":
+      return "✍️ 正在回复…";
+    case "reasoning":
+      return "💭 正在思考…";
+    case "commandExecution":
+      return "⚙️ 正在执行命令…";
+    case "fileChange":
+      return "📝 正在修改文件…";
+    case "mcpToolCall":
+    case "tool":
+      return "🔧 正在调用工具…";
+    case "plan":
+      return "📋 正在规划…";
+    case "webSearch":
+      return "🔎 正在联网搜索…";
+    default:
+      return STREAM_PLACEHOLDER;
+  }
+}
+
+// 渲染 turn 进行中的进度文本（纯文本）。有 agentMessage 文本则显示之 + 光标符，
+// 否则显示当前活动标签。
+function renderStreamProgress(session: StreamSession): string {
+  if (session.accumulatedText) {
+    return `${truncate(session.accumulatedText, TELEGRAM_MESSAGE_MAX_LENGTH - 2)} ▌`;
+  }
+  return session.activity || STREAM_PLACEHOLDER;
 }

@@ -29,6 +29,7 @@ export type TelegramSettings = {
   defaultCwd: string;
   sandboxMode: SandboxMode;
   memories: boolean;
+  streaming: boolean;
 };
 
 /**
@@ -55,6 +56,7 @@ export function readTelegramSettings(): TelegramSettings | null {
     defaultCwd,
     sandboxMode: readSandboxMode(),
     memories: readMemories(),
+    streaming: readStreaming(),
   };
 }
 
@@ -113,6 +115,16 @@ function readSandboxMode(): SandboxMode {
 // 行为；显式 false/0/no/off 才关闭。
 function readMemories(): boolean {
   const raw = (process.env.TELEGRAM_MEMORIES ?? "").trim().toLowerCase();
+  if (!raw) {
+    return true;
+  }
+  return !["false", "0", "no", "off"].includes(raw);
+}
+
+// 流式输出（typing 状态 + 消息实时编辑）。默认开启；显式 false/0/no/off 关闭，
+// 回退为 turn 完成后一次性发送。
+function readStreaming(): boolean {
+  const raw = (process.env.TELEGRAM_STREAMING ?? "").trim().toLowerCase();
   if (!raw) {
     return true;
   }

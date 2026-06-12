@@ -833,6 +833,7 @@ async function startTelegramBridgeIfConfigured(): Promise<void> {
       allowAllUsers: settings.allowAllUsers,
       defaultCwd: settings.defaultCwd,
       sandboxMode: settings.sandboxMode,
+      streaming: settings.streaming,
       knownChatIds: readKnownChatIds(),
       onChatSeen: (chatId) => {
         rememberChatId(chatId);
