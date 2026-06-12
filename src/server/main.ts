@@ -16,6 +16,13 @@ import fastifyMultipart from "@fastify/multipart";
 import fastifyStatic from "@fastify/static";
 import { installModuleAliasHook } from "./module";
 import { glob } from "glob";
+import { AppServerProcess } from "./app-server";
+import { TelegramBridge } from "./telegram-bridge";
+import {
+  readKnownChatIds,
+  readTelegramSettings,
+  rememberChatId,
+} from "./telegram-config";
 
 // Best-effort load of a project-root .env so `node src/server/main.js` also
 // picks up CODEX_CLI_PATH / HOST / PORT. Startup-time vars (NODE_USE_ENV_PROXY,
@@ -797,10 +804,62 @@ async function startIpcBridgeServer(options: ServerOptions): Promise<void> {
   module.runMainAppStartup();
 }
 
+// 在主服务启动后，按需拉起 Telegram bridge（独立的第二条链路）。功能由
+// TELEGRAM_BOT_TOKEN 触发，未配置则静默关闭。整段 try/catch 包裹 —— TG 启动失败
+// 绝不能拖垮主服务。
+async function startTelegramBridgeIfConfigured(): Promise<void> {
+  try {
+    const settings = readTelegramSettings();
+    if (!settings) {
+      return;
+    }
+    if (!settings.allowAllUsers && settings.allowedUserIds.size === 0) {
+      console.warn(
+        `[telegram] TELEGRAM_BOT_TOKEN is set but TELEGRAM_ALLOWED_USER_IDS is ` +
+          `empty; no one is authorized. Set it to your numeric user id ` +
+          `(or "*" to allow everyone).`,
+      );
+    }
+    const codexPath = process.env.CODEX_CLI_PATH || "codex";
+    const appServer = new AppServerProcess({
+      codexPath,
+      sandboxMode: settings.sandboxMode,
+      memories: settings.memories,
+    });
+    appServer.start();
+    const bridge = new TelegramBridge(appServer, {
+      token: settings.token,
+      allowedUserIds: settings.allowedUserIds,
+      allowAllUsers: settings.allowAllUsers,
+      defaultCwd: settings.defaultCwd,
+      sandboxMode: settings.sandboxMode,
+      streaming: settings.streaming,
+      knownChatIds: readKnownChatIds(),
+      onChatSeen: (chatId) => {
+        rememberChatId(chatId);
+      },
+    });
+    await bridge.start();
+    console.log(
+      `[telegram] bridge started (sandbox=${settings.sandboxMode}, ` +
+        `approval=never, allowlist=${
+          settings.allowAllUsers ? "*" : `${settings.allowedUserIds.size} ids`
+        })`,
+    );
+  } catch (error) {
+    console.error(
+      `[telegram] failed to start bridge (main service continues): ${
+        error instanceof Error ? (error.stack ?? error.message) : String(error)
+      }`,
+    );
+  }
+}
+
 async function main(args: string[]) {
   const options = parseServerArgs(args);
 
   await startIpcBridgeServer(options);
+  await startTelegramBridgeIfConfigured();
 }
 
 main(process.argv.slice(2));

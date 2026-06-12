@@ -220,6 +220,18 @@ AUTH_PASSWORD="一个足够长的随机密码"
 - 读取或修改文件、环境变量、凭据、ssh 密钥，以及该进程可访问的其他本地资源。
 - 使用主机上已登录的 codex / chatgpt 账户。这可能会消耗使用配额或计费额度，并可能暴露应用或 cli 所显示的账户元数据，例如姓名或电子邮件地址。
 
+### Telegram Bot 桥接
+
+设置 `.env` 的 `TELEGRAM_BOT_TOKEN` 即启用一个可选的 Telegram bot：在 Telegram 里给 bot 发消息会驱动一个 codex 会话，跑完把回复发回来（详见 `.env.example`）。
+
+**这是又一个主机级访问入口，安全模型与上面完全相同，且更宽松：**
+
+- 审批策略**固定为 `never`**（Telegram 端无法做交互式审批，否则需确认的操作会永久卡住），默认沙箱为 `danger-full-access`（**无沙箱**）。这意味着 allowlist 内的任何人，发一条消息就等同于以服务进程的身份在主机上任意执行命令、读写文件、使用你的 codex 凭据。
+- **务必保密 bot token**：拿到 token 的人 = 能控制这个 bot。
+- **务必严格设置 `TELEGRAM_ALLOWED_USER_IDS`**：只填你信任的数字 user id。留空则无人可用；设为 `*` 会放行所有人，仅限私有测试。
+- 想收紧可用 `TELEGRAM_SANDBOX_MODE` 设为 `workspace-write` 或 `read-only`。
+- bot 与浏览器那条链路共享 `~/.codex`（凭据与历史），但各自 spawn 独立的 `codex app-server`。见过的 chat 会持久化到 `~/.codex/telegram-bridge.json`，服务重启后会向这些 chat 发一条上线通知。
+
 ## 功能
 
 - 可托管于 macOS、Linux（以及任何能运行 codex cli + node 的环境）
