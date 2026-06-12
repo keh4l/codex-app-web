@@ -143,6 +143,11 @@ function bridgeStatePath(): string {
   return path.join(codexHome(), "telegram-bridge.json");
 }
 
+/** Telegram 收到的图片落地目录（CODEX_HOME/telegram-images）。 */
+export function telegramImageDir(): string {
+  return path.join(codexHome(), "telegram-images");
+}
+
 /** 读取持久化的 chatId 列表；文件缺失或损坏时返回空数组（永不抛）。 */
 export function readKnownChatIds(): number[] {
   try {

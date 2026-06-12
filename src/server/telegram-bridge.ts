@@ -14,17 +14,26 @@ import {
   setInterval as setIntervalTimer,
   clearInterval as clearIntervalTimer,
 } from "node:timers";
+import fs from "node:fs";
+import path from "node:path";
 import type { AppServerLike, AppServerNotification } from "./app-server";
+import { telegramImageDir } from "./telegram-config";
 
 // --- Telegram 数据形状（仅声明用到的字段） ---------------------------------
 
 type TelegramUser = { id?: number };
 type TelegramChat = { id?: number };
+type TelegramPhotoSize = {
+  file_id?: string;
+  file_unique_id?: string;
+};
 type TelegramMessage = {
   message_id?: number;
   from?: TelegramUser;
   chat?: TelegramChat;
   text?: string;
+  caption?: string;
+  photo?: TelegramPhotoSize[];
 };
 type TelegramCallbackQuery = {
   id?: string;
@@ -91,6 +100,7 @@ type FetchResponse = {
   status: number;
   statusText: string;
   json(): Promise<unknown>;
+  arrayBuffer(): Promise<ArrayBuffer>;
 };
 type FetchInit = {
   method?: string;
@@ -253,10 +263,16 @@ export class TelegramBridge {
     }
     this.noteChatSeen(chatId);
 
+    // 图片消息（photo）：下载后连同 caption 作为图文输入交给 codex。
+    if (Array.isArray(message.photo) && message.photo.length > 0) {
+      await this.handlePhotoMessage(chatId, message);
+      return;
+    }
+
     const text = (message.text ?? "").trim();
     if (!text) {
-      // 非文本消息（图片/语音/文件等）——给个明确反馈，避免用户以为 bot 掉线。
-      await this.sendMessage(chatId, "暂仅支持文本消息。");
+      // 其余非文本消息（语音/文件等）——给个明确反馈，避免用户以为 bot 掉线。
+      await this.sendMessage(chatId, "暂仅支持文本和图片消息。");
       return;
     }
     if (text.startsWith("/")) {
@@ -368,6 +384,43 @@ export class TelegramBridge {
   }
 
   private async handleUserText(chatId: number, text: string): Promise<void> {
+    await this.runTurn(chatId, [{ type: "text", text }]);
+  }
+
+  private async handlePhotoMessage(
+    chatId: number,
+    message: TelegramMessage,
+  ): Promise<void> {
+    const photos = message.photo ?? [];
+    // 同一张图的多个尺寸，取最后一个（分辨率最大）。
+    const largest = photos[photos.length - 1];
+    if (!largest?.file_id) {
+      await this.sendMessage(chatId, "⚠️ 未能读取图片，请重试。");
+      return;
+    }
+    let localPath: string;
+    try {
+      localPath = await this.downloadTelegramFile(
+        largest.file_id,
+        largest.file_unique_id ?? String(message.message_id ?? "image"),
+      );
+    } catch (error) {
+      this.lastError = errText(error);
+      await this.sendMessage(chatId, `⚠️ 图片下载失败：${errText(error)}`);
+      return;
+    }
+    const caption = (message.caption ?? "").trim() || "请分析这张图片。";
+    await this.runTurn(chatId, [
+      { type: "text", text: caption },
+      { type: "localImage", path: localPath },
+    ]);
+  }
+
+  /** 建/复用 thread → 开流式 → 发 turn 的通用路径（文本与图文共用）。 */
+  private async runTurn(
+    chatId: number,
+    input: Array<Record<string, unknown>>,
+  ): Promise<void> {
     let threadId = this.threadIdByChatId.get(chatId);
     try {
       if (!threadId) {
@@ -379,7 +432,7 @@ export class TelegramBridge {
       if (this.streaming) {
         await this.beginStreamSession(threadId, chatId);
       }
-      await this.startTurn(threadId, text);
+      await this.startTurn(threadId, input);
       // turn 已开始；turn/completed 通知会定稿（非流式时则一次性发）。
     } catch (error) {
       this.lastError = errText(error);
@@ -391,14 +444,44 @@ export class TelegramBridge {
     }
   }
 
+  /** 下载 Telegram 文件到本地（CODEX_HOME/telegram-images），返回绝对路径。 */
+  private async downloadTelegramFile(
+    fileId: string,
+    uniqueId: string,
+  ): Promise<string> {
+    const fileInfo = await this.callTelegram("getFile", { file_id: fileId });
+    const filePath = (fileInfo as { file_path?: string } | null)?.file_path;
+    if (!filePath) {
+      throw new Error("getFile 未返回 file_path");
+    }
+    // 下载 URL 含 token —— 出错只报状态码，不打印 URL。
+    const response = await httpFetch(
+      `https://api.telegram.org/file/bot${this.token}/${filePath}`,
+      { method: "GET" },
+    );
+    if (!response.ok) {
+      throw new Error(`下载失败 HTTP ${response.status}`);
+    }
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    const dir = telegramImageDir();
+    fs.mkdirSync(dir, { recursive: true });
+    const ext = path.extname(filePath) || ".jpg";
+    const dest = path.join(dir, `${uniqueId}${ext}`);
+    fs.writeFileSync(dest, bytes);
+    return dest;
+  }
+
   /**
    * 在指定 thread 上跑一轮。turn/start 若因该 thread 未在当前 app-server 进程
    * 物化而报 "thread not found"（绑定了别进程 / 历史创建的 thread，或 app-server
    * 懒重启后内存态丢失），先 thread/resume 把它加载进当前进程，再重试一次。
    * 移植自 codex-mobile callRpcWithArchiveRecovery 的 turn/start 分支。
    */
-  private async startTurn(threadId: string, text: string): Promise<void> {
-    const params = { threadId, input: [{ type: "text", text }] };
+  private async startTurn(
+    threadId: string,
+    input: Array<Record<string, unknown>>,
+  ): Promise<void> {
+    const params = { threadId, input };
     try {
       await this.appServer.rpc("turn/start", params);
     } catch (error) {
@@ -892,7 +975,7 @@ export class TelegramBridge {
     return [
       "*codex-web Telegram bridge*",
       "",
-      "直接发消息即可驱动一个 codex 会话；codex 跑完会把回复发回这里。",
+      "直接发文本或图片即可驱动一个 codex 会话；codex 跑完会把回复发回这里。",
       "",
       "/threads — 列出最近 thread 选择连接",
       "/newthread — 新建并连接 thread",
