@@ -336,10 +336,7 @@ export class TelegramBridge {
         threadId = await this.startThread();
         this.bindChatToThread(chatId, threadId);
       }
-      await this.appServer.rpc("turn/start", {
-        threadId,
-        input: [{ type: "text", text }],
-      });
+      await this.startTurn(threadId, text);
       // 不立即回复 —— 等 turn/completed 通知再回发 assistant 消息。
     } catch (error) {
       this.lastError = errText(error);
@@ -347,6 +344,26 @@ export class TelegramBridge {
         chatId,
         `⚠️ 发送失败：${errText(error)}\ncodex 后端可能已断开，请稍后重试。`,
       );
+    }
+  }
+
+  /**
+   * 在指定 thread 上跑一轮。turn/start 若因该 thread 未在当前 app-server 进程
+   * 物化而报 "thread not found"（绑定了别进程 / 历史创建的 thread，或 app-server
+   * 懒重启后内存态丢失），先 thread/resume 把它加载进当前进程，再重试一次。
+   * 移植自 codex-mobile callRpcWithArchiveRecovery 的 turn/start 分支。
+   */
+  private async startTurn(threadId: string, text: string): Promise<void> {
+    const params = { threadId, input: [{ type: "text", text }] };
+    try {
+      await this.appServer.rpc("turn/start", params);
+    } catch (error) {
+      if (!isThreadNotFoundError(error)) {
+        throw error;
+      }
+      // thread 未物化：resume 加载进当前进程后重试一次。
+      await this.appServer.rpc("thread/resume", { threadId });
+      await this.appServer.rpc("turn/start", params);
     }
   }
 
@@ -884,4 +901,14 @@ function splitTelegramText(
 
 function errText(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+// turn/start 报 thread 未物化时用于触发 resume 重试。判定字符串对齐 codex-mobile
+// 的 isThreadNotFoundError，匹配 app-server 的错误文案。
+function isThreadNotFoundError(error: unknown): boolean {
+  const message = errText(error).toLowerCase();
+  return (
+    message.includes("thread not found") ||
+    message.includes("no rollout found for thread id")
+  );
 }
