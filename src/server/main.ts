@@ -463,6 +463,17 @@ async function startIpcBridgeServer(options: ServerOptions): Promise<void> {
     },
   });
 
+  // 临时诊断：统计前端初始化经 ws 发起的 IPC 往返分布，用于定位跨境高延迟下
+  // 「话痨 IPC × 高 RTT」的优化点（哪些 channel 高频、可否在 client-inject 端
+  // 本地化/缓存以减少跨太平洋往返）。经 /__debug/ipc-stats 读取（受 auth 保护）。
+  const ipcStats = {
+    invokeByChannel: new Map<string, number>(),
+    portMessages: 0,
+    rendererSends: 0,
+    startedAt: 0,
+    lastAt: 0,
+  };
+
   if (auth) {
     const loginFailures = new Map<
       string,
@@ -663,6 +674,29 @@ async function startIpcBridgeServer(options: ServerOptions): Promise<void> {
     return sendIndexHtml(reply);
   });
 
+  // 临时诊断端点：?reset=1 清零；不带参则返回累计的 IPC 往返分布（按次数降序）。
+  // 用法：先 ?reset=1 清零 → 打开页面等加载完 → 不带参访问看这一次初始化的分布。
+  app.get("/__debug/ipc-stats", async (request, reply) => {
+    if ((request.query as { reset?: unknown })?.reset !== undefined) {
+      ipcStats.invokeByChannel.clear();
+      ipcStats.portMessages = 0;
+      ipcStats.rendererSends = 0;
+      ipcStats.startedAt = 0;
+      ipcStats.lastAt = 0;
+      return reply.send({ reset: true });
+    }
+    const topChannels = [...ipcStats.invokeByChannel.entries()].sort(
+      (left, right) => right[1] - left[1],
+    );
+    return reply.send({
+      windowMs: ipcStats.lastAt - ipcStats.startedAt,
+      invokeTotal: topChannels.reduce((sum, [, count]) => sum + count, 0),
+      portMessages: ipcStats.portMessages,
+      rendererSends: ipcStats.rendererSends,
+      topChannels,
+    });
+  });
+
   app.setNotFoundHandler((request, reply) => {
     if (request.url.startsWith("/@fs/")) {
       return reply.code(404).send({ error: "Not Found" });
@@ -749,6 +783,23 @@ async function startIpcBridgeServer(options: ServerOptions): Promise<void> {
           socket.send(JSON.stringify({ type: "ipc-pong" }));
         }
         return;
+      }
+
+      // 临时诊断计数（不含 ping）。
+      const statsNow = Date.now();
+      if (ipcStats.startedAt === 0) {
+        ipcStats.startedAt = statsNow;
+      }
+      ipcStats.lastAt = statsNow;
+      if (message.type === "ipc-renderer-invoke") {
+        ipcStats.invokeByChannel.set(
+          message.channel,
+          (ipcStats.invokeByChannel.get(message.channel) ?? 0) + 1,
+        );
+      } else if (message.type === "ipc-port-message") {
+        ipcStats.portMessages += 1;
+      } else if (message.type === "ipc-renderer-send") {
+        ipcStats.rendererSends += 1;
       }
 
       if (message.type === "ipc-renderer-send") {
