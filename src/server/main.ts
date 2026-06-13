@@ -10,9 +10,11 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { parseArgs as parseCliArgs } from "node:util";
+import { constants as zlibConstants } from "node:zlib";
 import { WebSocket, WebSocketServer } from "ws";
 import Fastify, { type FastifyReply } from "fastify";
 import fastifyMultipart from "@fastify/multipart";
+import fastifyCompress from "@fastify/compress";
 import fastifyStatic from "@fastify/static";
 import { installModuleAliasHook } from "./module";
 import { glob } from "glob";
@@ -437,6 +439,21 @@ async function startIpcBridgeServer(options: ServerOptions): Promise<void> {
   const app = Fastify({ logger: false });
   const websocketServer = new WebSocketServer({ noServer: true });
   const sockets = new Set<WebSocket>();
+
+  // 静态资源（前端 ~136MB，跨境部署时未压缩裸传是首屏加载慢的主因）运行时
+  // gzip / brotli 压缩。注册在所有路由之前，全局 onSend 钩子即可覆盖静态文件与
+  // 注入版 index.html。现代浏览器优先取 br，旧的回退 gzip；brotli 用中等质量
+  // （q5）在压缩比与实时压缩 CPU 之间取平衡（文件名带 hash，浏览器缓存后基本
+  // 不再重复请求，CPU 峰值只在部署后首次全量加载时出现）。补丁全在 src/server，
+  // 不碰 asar、跟随升级零维护。
+  await app.register(fastifyCompress, {
+    global: true,
+    encodings: ["br", "gzip"],
+    threshold: 1024,
+    brotliOptions: {
+      params: { [zlibConstants.BROTLI_PARAM_QUALITY]: 5 },
+    },
+  });
 
   if (auth) {
     const loginFailures = new Map<
