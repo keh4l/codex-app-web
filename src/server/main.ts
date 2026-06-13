@@ -11,7 +11,7 @@ import os from "node:os";
 import path from "node:path";
 import { parseArgs as parseCliArgs } from "node:util";
 import { WebSocket, WebSocketServer } from "ws";
-import Fastify from "fastify";
+import Fastify, { type FastifyReply } from "fastify";
 import fastifyMultipart from "@fastify/multipart";
 import fastifyStatic from "@fastify/static";
 import { installModuleAliasHook } from "./module";
@@ -23,6 +23,7 @@ import {
   readTelegramSettings,
   rememberChatId,
 } from "./telegram-config";
+import { injectClientPatches } from "./client-inject";
 
 // Best-effort load of a project-root .env so `node src/server/main.js` also
 // picks up CODEX_CLI_PATH / HOST / PORT. Startup-time vars (NODE_USE_ENV_PROXY,
@@ -589,13 +590,37 @@ async function startIpcBridgeServer(options: ServerOptions): Promise<void> {
     decorateReply: false,
   });
 
+  const webviewRoot = path.resolve(__dirname, "../../scratch/asar/webview");
+
   await app.register(fastifyStatic, {
-    root: path.resolve(__dirname, "../../scratch/asar/webview"),
+    root: webviewRoot,
     prefix: "/",
   });
 
+  // 预读 index.html 并注入客户端补丁（修复浏览器端粘贴/拖拽图片、文件等）。
+  // 注入逻辑全在 src/server，asar 零改动；升级 asar 后重启服务会自动重新注入。
+  // 读取失败时回退到原始 sendFile，保证页面仍可用（只是少了补丁）。
+  let injectedIndexHtml = "";
+  try {
+    injectedIndexHtml = injectClientPatches(
+      await fs.readFile(path.join(webviewRoot, "index.html"), "utf8"),
+    );
+  } catch (error) {
+    console.error(
+      `[codex-web] failed to prepare patched index.html: ${errorMessage(error)}`,
+    );
+  }
+  const sendIndexHtml = (reply: FastifyReply) =>
+    injectedIndexHtml
+      ? reply.type("text/html; charset=utf-8").send(injectedIndexHtml)
+      : reply.sendFile("index.html");
+
   app.get("/", async (_request, reply) => {
-    return reply.sendFile("index.html");
+    return sendIndexHtml(reply);
+  });
+
+  app.get("/index.html", async (_request, reply) => {
+    return sendIndexHtml(reply);
   });
 
   app.setNotFoundHandler((request, reply) => {
@@ -604,7 +629,7 @@ async function startIpcBridgeServer(options: ServerOptions): Promise<void> {
     }
 
     if (request.method === "GET") {
-      return reply.sendFile("index.html");
+      return sendIndexHtml(reply);
     }
     return reply.code(404).send({ error: "Not Found" });
   });
