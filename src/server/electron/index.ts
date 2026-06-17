@@ -786,11 +786,50 @@ const crashReporter = {
   },
 };
 
+// 让「邀请好友重置额度」入口常驻显示。codex 前端用后端
+// GET /referrals/invite/eligibility 的 should_show 字段控制该入口显隐——邀请一次
+// 后端就把它置 false、入口消失。前端这些 API 都经主进程 net.fetch 出口实际发送，
+// 这里命中该接口时把 should_show 强制为 true（其余字段如 grant_amount 原样保留，
+// 弹窗仍用后端真实值）。纯 src/server 定制，不碰 asar、跟随升级零维护。
+// 注意：后端「最多邀请 3 人」的上限与资格校验在 POST /wham/referrals/invite 处，
+// 强制显示入口不改变、也无法绕过它。
+async function patchReferralEligibility(
+  input: string | URL,
+  response: Response,
+): Promise<Response> {
+  const url = typeof input === "string" ? input : input.toString();
+  if (!url.includes("/referrals/invite/eligibility")) {
+    return response;
+  }
+  try {
+    const data = (await response.clone().json()) as Record<string, unknown>;
+    // 临时诊断：命中时打一行，便于确认弹窗所需字段（grant_amount 等）在
+    // should_show=false 时是否仍下发。
+    log("referral-eligibility", [
+      { keys: Object.keys(data), should_show: data.should_show },
+    ]);
+    data.should_show = true;
+    const headers = new Headers(response.headers);
+    headers.delete("content-length");
+    return new Response(JSON.stringify(data), {
+      status: response.status,
+      statusText: response.statusText,
+      headers,
+    });
+  } catch {
+    return response;
+  }
+}
+
 const net = {
   async fetch(input: string | URL, init?: RequestInit): Promise<Response> {
     // log("net.fetch", [input, init]);
     if (typeof globalThis.fetch === "function") {
-      return globalThis.fetch(input as URL | RequestInfo, init);
+      const response = await globalThis.fetch(
+        input as URL | RequestInfo,
+        init,
+      );
+      return patchReferralEligibility(input, response);
     }
     return new Response("", { status: 204 });
   },
