@@ -4,6 +4,7 @@
 # the unpacked desktop app (~850M) and downloaded zips are not committed;
 # the patched scratch/asar (the actual frontend) IS committed.
 scratch/Codex.app/
+scratch/ChatGPT.app/
 scratch/*.zip
 sentry
 

@@ -495,7 +495,8 @@ const I18N_LAYER_OVERRIDES: Record<string, unknown> = {
 
 electronShim.overrideAdapter = {
   getGateOverride(e) {
-    if (e.name === "2929582856") { // codex_app_sunset
+    if (e.name === "2929582856") {
+      // codex_app_sunset
       return {
         ...e,
         value: false,

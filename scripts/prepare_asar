@@ -28,9 +28,17 @@ if [[ ! -f scratch/asar/package.json || ! -f scratch/asar/webview/index.html || 
 fi
 
 node -e '
+  const fs = require("fs");
+  const path = require("path");
   const packageJson = require("./scratch/asar/package.json");
   if (packageJson.version !== "26.707.30751") {
     throw new Error(`unexpected ChatGPT app version: ${packageJson.version}`);
+  }
+  if (
+    typeof packageJson.main !== "string" ||
+    !fs.existsSync(path.join("scratch/asar", packageJson.main))
+  ) {
+    throw new Error(`missing ChatGPT package main entry: ${packageJson.main}`);
   }
 '
 
@@ -55,19 +63,31 @@ else
   )
   prettier --ignore-path /dev/null --ignore-unknown --write "${patched_files[@]}"
 fi
-patch --batch --forward --strip 1 --directory scratch/asar < patches/webview-style.patch
-patch --batch --forward --strip 1 --directory scratch/asar < patches/webview-preload.patch
-patch --batch --forward --strip 1 --directory scratch/asar < patches/webview-favicon.patch
-patch --batch --forward --strip 1 --directory scratch/asar < patches/webview-pwa.patch
-patch --batch --forward --strip 1 --directory scratch/asar < patches/webview-thread-title.patch
-patch --batch --forward --strip 1 --directory scratch/asar < patches/webview-initial-route.patch
-patch --batch --forward --strip 1 --directory scratch/asar < patches/webview-electron-shim-close-sidebar.patch
-patch --batch --forward --strip 1 --directory scratch/asar < patches/webview-prosemirror-inputmode.patch
-patch --batch --forward --strip 1 --directory scratch/asar < patches/webview-use-atfs-for-local-files.patch
-patch --batch --forward --strip 1 --directory scratch/asar < patches/webview-prompt-search-param.patch
-patch --batch --forward --strip 1 --directory scratch/asar < patches/webview-statsig-override-adapter.patch
-patch --batch --forward --strip 1 --directory scratch/asar < patches/sentry-disable-shell.patch
-patch --batch --forward --strip 1 --directory scratch/asar < patches/sentry-disable-webview.patch
+apply_asar_patch() {
+  patch --batch --forward -F 0 --strip 1 --directory scratch/asar < "$1"
+}
+
+apply_asar_patch patches/webview-style.patch
+apply_asar_patch patches/webview-preload.patch
+apply_asar_patch patches/webview-favicon.patch
+apply_asar_patch patches/webview-pwa.patch
+apply_asar_patch patches/webview-thread-title.patch
+apply_asar_patch patches/webview-initial-route.patch
+apply_asar_patch patches/webview-electron-shim-close-sidebar.patch
+apply_asar_patch patches/webview-prosemirror-inputmode.patch
+apply_asar_patch patches/webview-use-atfs-for-local-files.patch
+apply_asar_patch patches/webview-prompt-search-param.patch
+apply_asar_patch patches/webview-app-host-services.patch
+apply_asar_patch patches/webview-statsig-override-adapter.patch
+apply_asar_patch patches/sentry-disable-shell.patch
+apply_asar_patch patches/sentry-disable-webview.patch
 # applied last: its context is generated against the fully-patched index.html
-patch --batch --forward --strip 1 --directory scratch/asar < patches/webview-remove-csp.patch
+apply_asar_patch patches/webview-remove-csp.patch
+
+patch_reject="$(find scratch/asar -type f -name '*.rej' -print -quit)"
+if [[ -n "$patch_reject" ]]; then
+  echo "patch left a reject file: $patch_reject" >&2
+  exit 1
+fi
+find scratch/asar -type f -name '*.orig' -delete
 rm -rf scratch/asar/node_modules/better-sqlite3

@@ -1,29 +1,21 @@
---- a/webview/assets/local-conversation-thread-BpXdMdk5.js
-+++ b/webview/assets/local-conversation-thread-BpXdMdk5.js
-@@ -309,6 +309,7 @@
-   xi as $t,
-   xr as en,
-   xt as tn,
-+  yt as codexHostedWindowTitleAtom,
-   z as nn,
-   zr as rn,
- } from "./app-server-manager-signals-DixsiAkQ.js";
-@@ -41855,6 +41856,7 @@
-     C = a(Ct, e) ?? `needs_resume`,
-     w = a(jt, e),
-     T = a(Ht, e),
-+    codexHostedWindowTitle = a(codexHostedWindowTitleAtom, e),
-     E = a(ct, e) === `projectless`,
-     O = a(ge, e),
-     k = a(be, e),
-@@ -41879,6 +41881,10 @@
-   (0, Z.useEffect)(() => {
-     G?.id == null || G.readAt != null || W(G.id);
-   }, [G?.id, G?.readAt, W]);
-+  (0, Z.useEffect)(() => {
+--- a/webview/assets/local-conversation-thread-D5wniwTZ.js
++++ b/webview/assets/local-conversation-thread-D5wniwTZ.js
+@@ -16074,6 +16074,7 @@
+     C = G(Pt, e) ?? !1,
+     w = G(Vt, e),
+     T = G(p, e),
++    codexHostedWindowTitle = G(Zo, e),
+     E = G(xr, e) === `projectless`,
+     D = G(fe, e),
+     O = G(yr, e),
+@@ -16108,6 +16109,10 @@
+   (0, sC.useEffect)(() => {
+     ie?.id == null || ie.readAt != null || re(ie.id);
+   }, [ie?.id, ie?.readAt, re]);
++  (0, sC.useEffect)(() => {
 +    let t = codexHostedWindowTitle?.trim();
 +    t && (document.title = `${t} | Codex`);
 +  }, [codexHostedWindowTitle]);
-   let te = on(),
-     { agentMode: q } = gi({ conversationId: e, hostId: S }),
-     ne = x ? fe(x) : null,
+   let se = Be(),
+     { agentMode: ce, shouldSendPermissionOverrides: le } = bo({
+       conversationId: e,

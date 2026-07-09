@@ -1,7 +1,7 @@
 ---
 project_name: 'codex-web (codex-app-web)'
 user_name: 'keh4l'
-date: '2026-06-12'
+date: '2026-07-10'
 sections_completed:
   ['technology_stack', 'language_rules', 'framework_rules', 'testing_rules', 'quality_rules', 'workflow_rules', 'anti_patterns']
 status: 'complete'
@@ -17,7 +17,7 @@ _本文件是 AI 智能体在 codex-web 中写代码前必须遵守的关键规�
 ## 0. 第一铁律（违反即破坏可升级性）
 
 - **只允许改 `src/server/`、`src/browser/`、文档（含 `_bmad-output/`、`README.md`、`patches/`）。绝不改动 `scratch/asar/`。**
-- `scratch/asar/` 是打过补丁的**官方 Codex desktop（Electron）前端**，含 OpenAI 专有代码，由 `npm run setup:asar` 从官方 zip 重建——任何手改都会在下次重建时丢失。
+- `scratch/asar/` 是打过补丁的**官方 ChatGPT/Codex desktop（Electron）前端**，含 OpenAI 专有代码，由 `npm run setup:asar` 从固定版本的官方 zip 重建——任何手改都会在下次重建时丢失。
 - 需要改 vendored 前端时，**改 `patches/*.patch`**（由 `scripts/prepare_asar` 用 `patch --forward` 应用），不要直接编辑 asar 文件。
 - 本仓库是 `0xcaff/codex-web` 的**私有 fork**，必须保持私有（含 OpenAI 代码）。一切设计以"薄封装、能干净 rebase 上游"为准。
 
@@ -27,8 +27,8 @@ _本文件是 AI 智能体在 codex-web 中写代码前必须遵守的关键规�
 - **语言**：TypeScript `^6.0.2`，`strict` + `noUncheckedIndexedAccess` + NodeNext + `target esnext` + `isolatedModules` + `moduleDetection: force`，`types: []`（不自动引入 `@types/node` 全局）。
 - **后端**：Fastify `^5.8.5`、`ws` `^8.20.0`、`@fastify/multipart`、`@fastify/static`、`better-sqlite3` `^12.9.0`、`glob`。
 - **前端/preload 构建**：Vite `^8.0.8`，React `^19.2`（**仅** `src/browser/` 的工作区对话框等组件使用；vendored 前端自带 React，勿混淆）。
-- **Electron**：`41.2.0` 仅 devDependency，用于 `launch:unpacked` 调试，**生产路径不跑 Electron**。
-- **Vendored 前端**：`scratch/asar`，官方 Codex app 版本 **26.608.12217**（见 `scripts/prepare`）。
+- **Electron**：`42.1.0` 仅 devDependency，用于 `launch:unpacked` 调试，**生产路径不跑 Electron**。
+- **Vendored 前端**：`scratch/asar`，官方 ChatGPT app 版本 **26.707.30751**（见 `scripts/prepare`）。外层 archive/Bundle 是 `ChatGPT-darwin-arm64-*.zip` / `ChatGPT.app`；asar 内 productName、title、URL scheme 和 `codex_desktop:*` 协议仍是 Codex，禁止全局改名。
 
 ## 2. 架构心智模型（动手前必须建立）
 
@@ -54,7 +54,7 @@ codex 二进制 (CODEX_CLI_PATH → PATH 中的 codex)
 ## 3. IPC 桥规则（改通信层时）
 
 - 桥只走**字符串/JSON**。消息类型见两端的联合类型：`ipc-renderer-invoke` / `-send` / `-post-message`、`ipc-port-message` / `-close`、`workspace-directory-entries-request`；反向 `ipc-main-event`、`ipc-renderer-invoke-result`、`workspace-directory-entries-result`。新增类型要**两端同步**加 case。
-- **26.608+ MessagePort RPC**：`codex_desktop:connect-app-host` 经 `ipcRenderer.postMessage` 传一个 MessagePort，RPC 会话在其上跑。Port 留在各自进程，只有**字符串帧**过桥（JSON 无损）。`BridgedMessagePort` **故意不打日志**（RPC 太吵）。
+- **26.608+ MessagePort RPC**：`codex_desktop:connect-app-host` 经 `ipcRenderer.postMessage` 传一个 MessagePort，RPC 会话在其上跑。Port 留在各自进程，只有**字符串帧**过桥（JSON 无损）。`BridgedMessagePort` **故意不打日志**（RPC 太吵）。26.707 新增 app-host service 时也必须保留这条桥，不能用提前返回绕开连接。
 - **双层心跳，勿删**：
   - 浏览器侧 `shim.ts`：应用层 `ipc-ping`/`ipc-pong`（15s 间隔 / 10s 超时）+ 自动重连 + `outboundQueue` 离线缓冲——兜底跨境 ws **half-open 死连接**（commit b65cdf1）。
   - server 侧 `main.ts`：native ws `ping/pong`（30s）回收半开连接。
@@ -72,6 +72,7 @@ codex 二进制 (CODEX_CLI_PATH → PATH 中的 codex)
 - **裸 http 场景的两个 polyfill 勿删**（codex-web 常以 http 从 LAN/服务器 IP 提供，非安全上下文）：
   - `crypto.randomUUID`：非安全上下文无此 API，Statsig / vscode-api RPC 无防护调用它 → 用 `getRandomValues` 补。
   - `globalThis.process` 最小填充：vendored 模块无 `typeof` 守卫就解引用 `process`；**`versions` 必须留空**，让 Node/Electron 探测在 guarded 代码里保持 false。
+- 新版 preload 的 `codex_desktop:start-file-drag` 是同步原生能力；浏览器 shim 必须同步返回“不支持”，不能伪造成阻塞式 WebSocket RPC。
 - **Statsig override 是离线/静默遥测下控制功能开关的唯一途径**（本部署故意永不连 Statsig 服务）。改功能开关看 `electronShim.overrideAdapter`：
   - layer `72216192` 强制 `enable_i18n: true`——否则选了语言仍回退英文（commit ab2405f）。i18n 经 `useLayer` 读取，override 必须打**layer** API，不是 gate。
   - gate `2929582856`（`codex_app_sunset`）强制 `false`。
@@ -88,7 +89,7 @@ codex 二进制 (CODEX_CLI_PATH → PATH 中的 codex)
 ## 7. Build & Run（命令语义）
 
 - `build:server` = `cd src/server && tsc`。`build:browser` = `vite build --config vite.browser.config.ts`（把 `electron` alias 到 `src/browser/shim.ts`，入口 `scratch/asar/.vite/build/preload.js` → 输出 `preload.js` 到 `webview/assets`）。
-- `npm run setup:asar` = 下载官方 app + 解包 + 应用 `patches/*` + 构建。**升级官方版本**：改 `scripts/prepare` 的 `APP_VERSION` 再重跑，按需调补丁。
+- `npm run setup:asar` = 下载固定版本官方 ChatGPT app + 清理旧 `scratch` 生成树 + 提取唯一 app.asar + 应用 `patches/*` + 构建。**升级官方版本**：同步改 `scripts/prepare`、`default.nix` 与 CLI 固定哈希，再从纯净树按语义重生补丁。
 - `scripts/start` = `source .env`（`set -a`）后 `exec node src/server/main.js`。**必须经此启动**：`NODE_USE_ENV_PROXY` / `HTTP(S)_PROXY` 在 node bootstrap 阶段就被读取，早于任何用户代码；直接 `node main.js` 代理设置**无效**。
 - `.env` 值**一律加引号**（被 bash `source`，未引号含空格的值会被当命令执行）。`.env` 已 gitignore，模板见 `.env.example`。
 
@@ -116,6 +117,7 @@ codex 二进制 (CODEX_CLI_PATH → PATH 中的 codex)
 - ❌ 直接 `node src/server/main.js` 还指望代理 / `.env` 全量生效——用 `scripts/start` / `npm start`。
 - ❌ 新增 IPC 消息类型只改一端（`main.ts` 与 `electron/index.ts` 必须同步）。
 - ❌ 给 `.env` 的值漏引号。
+- ❌ 把外层 ChatGPT 品牌全局替换进 asar 内部 Codex productName、scheme 或 IPC channel。
 
 ---
 
@@ -125,4 +127,4 @@ codex 二进制 (CODEX_CLI_PATH → PATH 中的 codex)
 
 **For Humans：** 保持精简、聚焦智能体易踩的非显然点；技术栈或上游版本变化时更新；定期清理已变显然的规则。
 
-Last Updated: 2026-06-12
+Last Updated: 2026-07-10

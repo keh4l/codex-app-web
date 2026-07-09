@@ -1,96 +1,148 @@
---- a/webview/assets/app-main-BcDiyTD0.js
-+++ b/webview/assets/app-main-BcDiyTD0.js
-@@ -1210,6 +1210,7 @@
- import "./katex-BEvuNVH0.js";
- import "./pdf-BnC38vL8.js";
- import {
-+  _ as useSearchParams,
-   a as Dc,
-   c as Oc,
-   d as kc,
-@@ -23234,6 +23235,8 @@
-     f = lv(),
-     m = Ac(),
-     h = m.state,
-+    [searchParams] = useSearchParams(),
-+    searchParamsPrompt = searchParams.get(`prompt`),
-     { data: g } = O(`account-info`, {
-       queryConfig: { enabled: a === `chatgpt` },
+--- a/webview/assets/app-initial~app-main~page-BF1QkwFT.js
++++ b/webview/assets/app-initial~app-main~page-BF1QkwFT.js
+@@ -64950,6 +64950,9 @@
+       ],
      }),
-@@ -23584,6 +23587,8 @@
-                                   ? (e) => (0, Z.jsx)(iA, { ...e })
-                                   : void 0,
-                                 canStartRealtimeConversation: !0,
-+                                defaultText: searchParamsPrompt ?? void 0,
-+                                initialPrompt: searchParamsPrompt ?? void 0,
-                                 onLocalConversationCreated: z,
-                                 externalFooterVariant: `home`,
-                                 hideRunLocationDropdownOverride:
-@@ -23617,6 +23622,8 @@
-                         browserConversationId: L,
-                         canStartRealtimeConversation: !0,
-                         composerLayoutMode: `auto-single-line`,
-+                        defaultText: searchParamsPrompt ?? void 0,
-+                        initialPrompt: searchParamsPrompt ?? void 0,
-                         onLocalConversationCreated: z,
-                         showWorkspaceDropdownInFooter: !1,
-                         hideRunLocationDropdownOverride: C.kind !== `git`,
---- a/webview/assets/composer-D1QtVouy.js
-+++ b/webview/assets/composer-D1QtVouy.js
-@@ -22539,6 +22539,7 @@
-   showPlanKeywordSuggestion: m,
-   composerModeAvailability: h,
-   placeholderText: v,
-+  initialPrompt,
-   composerLayoutMode: b,
-   hotkeyWindowHomeFooterControls: C,
-   defaultCwd: E,
-@@ -22977,13 +22978,20 @@
-       (Nn && $i(Nn),
-         On && Wa(On),
-         Ga != null && Ha(Ga),
--        En && En !== X.getText() && X.setPromptText(En),
-+        En && En !== X.getText()
-+          ? X.setPromptText(En)
-+          : !En &&
-+              initialPrompt != null &&
-+              initialPrompt !== `` &&
-+              X.getText() === ``
-+            ? X.setPromptText(initialPrompt)
+     G = i.formatMessage(Lpe.doAnything),
++    promptSearchParam = new URLSearchParams(window.location.search).get(
++      `prompt`,
++    ),
+     je = (0, F6.jsxs)(F6.Fragment, {
+       children: [
+         Oe,
+@@ -64959,6 +64962,8 @@
+             className: `electron:hidden`,
+             hideRunLocationDropdownOverride: E.kind !== `git`,
+             placeholderText: G,
++            defaultText: promptSearchParam ?? void 0,
++            initialPrompt: promptSearchParam ?? void 0,
+             freeUpsellButton: oe ? (0, F6.jsx)(dqe, { onClick: we }) : null,
+           }),
+         }),
+@@ -65134,6 +65139,10 @@
+                                               !ee,
+                                             onLocalConversationCreated: ie,
+                                             placeholderText: G,
++                                            defaultText:
++                                              promptSearchParam ?? void 0,
++                                            initialPrompt:
++                                              promptSearchParam ?? void 0,
+                                           }),
+                                         ],
+                                       }),
+@@ -65161,6 +65170,8 @@
+                             showWorkspaceDropdownInUtilityBar: !1,
+                             hideRunLocationDropdownOverride: !ee,
+                             placeholderText: G,
++                            defaultText: promptSearchParam ?? void 0,
++                            initialPrompt: promptSearchParam ?? void 0,
+                             surfaceClassName: `electron:dark:bg-token-side-bar-background`,
+                           }),
+                         ],
+--- a/webview/assets/app-initial~app-main~new-thread-panel-page~appgen-library-page~hotkey-window-thread-page~ho~iufn7mg3-DN861ZdI.js
++++ b/webview/assets/app-initial~app-main~new-thread-panel-page~appgen-library-page~hotkey-window-thread-page~ho~iufn7mg3-DN861ZdI.js
+@@ -54618,6 +54618,7 @@
+   showUtilityBar: d,
+   composerModeAvailability: f,
+   placeholderText: p,
++  initialPrompt: promptFromSearchParams,
+   composerLayoutMode: m,
+   hotkeyWindowHomeFooterControls: h,
+   homeRunLocationRemoteProject: g,
+@@ -55146,13 +55147,20 @@
+     pa = (0, F9.useEffectEvent)(() => {
+       (cn && ua(cn),
+         da != null && ca(da),
+-        sn && sn !== Cn.getText() && Cn.setPromptText(sn),
++        sn && sn !== Cn.getText()
++          ? Cn.setPromptText(sn)
++          : !sn &&
++              promptFromSearchParams != null &&
++              promptFromSearchParams !== `` &&
++              Cn.getText() === ``
++            ? Cn.setPromptText(promptFromSearchParams)
 +            : null,
-         kn != null && kn.length > 0 && dc(kn),
-         Mn != null && Mn.length > 0 && Zi(Mn));
+         ln != null && ln.length > 0 && $i(ln),
+         un != null && un.length > 0 && li(un));
      });
-   (0, Z.useEffect)(() => {
-     qa();
--  }, [En, On, kn, Mn, Ga]);
-+  }, [En, On, kn, Mn, Ga, initialPrompt]);
-   let [Ja, Ya] = Ot(`composer_prefill`),
-     Xa = (0, Z.useEffectEvent)(() => {
-       let e = Ja?.commentAttachments;
-@@ -25168,6 +25176,8 @@
-       hideRunLocationDropdownOverride: C,
-       composerModeAvailability: w,
-       placeholderText: T,
+   (0, F9.useEffect)(() => {
+     pa();
+-  }, [sn, cn, ln, un, da]);
++  }, [sn, cn, ln, un, da, promptFromSearchParams]);
+   let [ma, ha] = Ut(`composer_prefill`),
+     ga = (0, F9.useEffectEvent)(() => {
+       let e = ma?.commentAttachments,
+@@ -57655,9 +57663,11 @@
+     ((J9 = Y()), Gt(), (Y9 = t(G(), 1)), Za(), Cg(), mu(), (X9 = Z()));
+   });
+ function uee(e) {
+-  let t = (0, Z9.c)(107),
++  let t = (0, Z9.c)(109),
+     {
+       browserConversationId: n,
 +      defaultText,
 +      initialPrompt,
-       composerLayoutMode: D,
-       hotkeyWindowHomeFooterControls: O,
-       defaultCwd: k,
-@@ -25195,7 +25205,7 @@
-     ? (V = t[1])
-     : ((V = Ir(ie.value)), (t[0] = ie.value), (t[1] = V));
-   let se = V,
--    ce = ie.get(Kr),
-+    ce = defaultText ?? ie.get(Kr),
-     H = B?.type === `local` ? B.localConversationId : null,
-     U = Gn(H),
-     W = a(mt, H),
-@@ -25446,6 +25456,7 @@
-         showPlanKeywordSuggestion: te,
-         composerModeAvailability: w,
-         placeholderText: T,
+       className: r,
+       aboveComposerContent: i,
+       aboveComposerContentLayout: a,
+@@ -57927,7 +57937,7 @@
+       (t[57] = ze),
+       (t[58] = Be));
+   let Ve = cee,
+-    He = Kd(W) ? `prompt` : `plain`,
++    He = Kd(defaultText ?? W) ? `prompt` : `plain`,
+     Ue;
+   t[59] !== i || t[60] !== O || t[61] !== x
+     ? ((Ue =
+@@ -57978,7 +57988,8 @@
+   t[90] !== We ||
+   t[91] !== Ge ||
+   t[92] !== N ||
+-  t[93] !== null
++  t[93] !== null ||
++  t[107] !== initialPrompt
+     ? ((Ke = (0, $9.jsx)(M9, {
+         aboveComposerHeaderContent: We,
+         clientThreadId: te,
+@@ -58000,6 +58011,7 @@
+         hideRunLocationDropdownOverride: F,
+         composerModeAvailability: v,
+         placeholderText: y,
 +        initialPrompt,
-         composerLayoutMode: re,
-         hotkeyWindowHomeFooterControls: O,
-         defaultCwd: k,
+         composerLayoutMode: I,
+         hotkeyWindowHomeFooterControls: x,
+         homeRunLocationRemoteProject: S,
+@@ -58043,6 +58055,7 @@
+       (t[91] = Ge),
+       (t[92] = N),
+       (t[93] = null),
++      (t[107] = initialPrompt),
+       (t[94] = Ke))
+     : (Ke = t[94]);
+   let qe;
+@@ -58051,10 +58064,15 @@
+   t[97] !== W ||
+   t[98] !== He ||
+   t[99] !== Ue ||
+-  t[100] !== Ke
++  t[100] !== Ke ||
++  t[108] !== defaultText
+     ? ((qe = (0, $9.jsxs)(
+         Ve,
+-        { defaultText: W, defaultTextKind: He, children: [Ue, Ke] },
++        {
++          defaultText: defaultText ?? W,
++          defaultTextKind: He,
++          children: [Ue, Ke],
++        },
+         ie,
+       )),
+       (t[95] = Ve),
+@@ -58063,6 +58081,7 @@
+       (t[98] = He),
+       (t[99] = Ue),
+       (t[100] = Ke),
++      (t[108] = defaultText),
+       (t[101] = qe))
+     : (qe = t[101]);
+   let Je;

@@ -1,2 +1,0 @@
-import{xr as e}from"./src-X9SEQR78.js";import{t}from"./use-global-state-D4Do97oS.js";import{t as n}from"./use-auth-DL2sxW8T.js";function r(){let{data:r,isLoading:i}=t(e.NUX_2025_09_15),{authMethod:a}=n();return`none`}export{r as t};
-//# sourceMappingURL=use-nux-CtvuikIC.js.map

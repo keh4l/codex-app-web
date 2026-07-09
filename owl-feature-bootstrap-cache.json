@@ -1,1 +1,1 @@
-{"enabledOwlFeatureNames":[]}
+{"enabledOwlFeatureNames":[],"disabledOwlFeatureNames":["OwlAuth","OwlAutofillAndPasswords","OwlDownloads","OwlPermissions","OwlWebViewEnhancements","OwlExtensions","OwlHistory","OwlPrinting","OwlOpenAIGoLinks"]}

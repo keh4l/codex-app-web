@@ -1,9 +1,9 @@
---- a/webview/assets/composer-controller-dL4CgOni.js
-+++ b/webview/assets/composer-controller-dL4CgOni.js
-@@ -20246,8 +20246,18 @@
-     u = new EventTarget(),
-     d = new rl(),
-     f = o,
+--- a/webview/assets/app-initial~app-main~onboarding-page~hotkey-window-thread-page~quick-chat-window-page~chatg~k0ede4gb-BfuFOm2j.js
++++ b/webview/assets/app-initial~app-main~onboarding-page~hotkey-window-thread-page~quick-chat-window-page~chatg~k0ede4gb-BfuFOm2j.js
+@@ -189244,8 +189244,18 @@
+     f = new EventTarget(),
+     p = new m1t(),
+     m = s,
 +    inputModeDisabled = !1,
 +    getAttributes = () =>
 +      inputModeDisabled
@@ -12,18 +12,19 @@
 +    setPointerInputMode = (e) => {
 +      inputModeDisabled !== e &&
 +        ((inputModeDisabled = e),
-+        p.isDestroyed || p.setProps({ attributes: getAttributes }));
++        h.isDestroyed || h.setProps({ attributes: getAttributes }));
 +    },
-     p = new nc(null, {
+     h = new kL(null, {
 -      attributes: { spellcheck: `true` },
 +      attributes: getAttributes,
-       state: G.create({
-         schema: nl,
+       state: Hre.create({
+         schema: tJ,
          doc:
-@@ -20335,6 +20345,17 @@
-         let t = p.state.apply(e);
-         (p.updateState(t), u.dispatchEvent(new Event(we)));
-       },
+@@ -189375,6 +189385,17 @@
+         let t = h.state.apply(e);
+         (h.updateState(t),
+           f.dispatchEvent(new CustomEvent(hq, { detail: e.docChanged })));
++      },
 +      handleDOMEvents: {
 +        mousedown(e, t) {
 +          return (setPointerInputMode(!0), !1);
@@ -34,7 +35,6 @@
 +        blur(e, t) {
 +          return (setPointerInputMode(!1), !1);
 +        },
-+      },
+       },
        handlePaste(e, t) {
          if (t.defaultPrevented) return !0;
-         let n = t.clipboardData,

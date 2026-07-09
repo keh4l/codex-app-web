@@ -1,0 +1,17 @@
+--- a/webview/assets/app-initial~app-main~hotkey-window-thread-page~thread-app-shell-chrome~header~remote-conver~h59fr3q5-Cm3GYhJA.js
++++ b/webview/assets/app-initial~app-main~hotkey-window-thread-page~thread-app-shell-chrome~header~remote-conver~h59fr3q5-Cm3GYhJA.js
+@@ -47072,7 +47072,13 @@
+           (super(), (this.#e = e));
+         }
+       }),
+-      (qNe = new KNe({ appActions: lz, appUpdates: PNe, downloads: WNe })));
++      (qNe = new KNe({
++        appActions: lz,
++        appUpdates: PNe,
++        downloads: WNe,
++        requestUserInputAutoResolution:
++          window.__ELECTRON_SHIM__.services.requestUserInputAutoResolution,
++      })));
+   });
+ function YNe() {
+   let { port1: e, port2: t } = new MessageChannel();

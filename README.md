@@ -3,8 +3,8 @@
 为 codex desktop 打造的浏览器前端，运行在你掌控的机器上。
 
 > 本仓库是 [0xcaff/codex-web](https://github.com/0xcaff/codex-web) 的私有 fork：
-> 已把打过补丁的桌面前端（`scratch/asar`，约 150 MB）直接提交进仓库，
-> clone 后即可运行，无需在每台机器上下载约 330 MB 的官方 Codex 应用。
+> 已把打过补丁的桌面前端（`scratch/asar`）直接提交进仓库，
+> clone 后即可运行，无需在每台机器上下载官方 ChatGPT 应用。
 > ⚠️ 因为包含 OpenAI 专有前端代码，本仓库必须保持**私有**。
 
 https://github.com/user-attachments/assets/0a33cbd8-741c-412c-9e75-46dfe9324596
@@ -19,7 +19,7 @@ codex-web 把 codex desktop 带进浏览器，同时让后端继续运行在你�
 
 ## 工作原理（一句话）
 
-`codex-web` 把官方 Codex desktop（Electron）的前端跑在浏览器里，由内嵌的 desktop 主进程
+`codex-web` 把官方 ChatGPT/Codex desktop（Electron）的前端跑在浏览器里，由内嵌的 desktop 主进程
 spawn `codex app-server`（stdio JSON-RPC）作为后端。默认监听 `127.0.0.1:8214`。
 codex 二进制的查找顺序：`.env` / 环境变量里的 `CODEX_CLI_PATH` → 进程 `PATH` 中的 `codex`。
 
@@ -46,7 +46,11 @@ npm start            # 加载 .env，然后启动 server
 ```
 
 打开 <http://127.0.0.1:8214>。macOS 上 `CODEX_CLI_PATH` 推荐直接用官方桌面应用自带的
-二进制：`/Applications/Codex.app/Contents/Resources/codex`（已登录的话凭据直接复用）。
+二进制：`/Applications/ChatGPT.app/Contents/Resources/codex`（已登录的话凭据直接复用）。
+
+当前 vendoring 的官方应用版本为 `26.707.30751`。该版本的下载包和外层 Bundle 已改名为
+`ChatGPT-darwin-arm64-*.zip` / `ChatGPT.app`，但 asar 内的 productName、页面标题、
+`codex://` scheme 和 `codex_desktop:*` IPC 仍沿用 Codex；升级时不要全局替换内部名称。
 
 ## Linux 服务器部署
 
@@ -145,7 +149,7 @@ journalctl -u codex-web -f      # 跟踪日志
 | `npm install` 在 better-sqlite3 处报错 | 缺编译工具链：`sudo apt install build-essential python3`（macOS：`xcode-select --install`）。 |
 | 升级 `@openai/codex` 后又找不到二进制 | npm 包内部路径随版本变化，重新 `find` 并更新 `.env` 的 `CODEX_CLI_PATH`。 |
 
-## 升级内置的 Codex 前端版本
+## 升级内置的 ChatGPT/Codex 前端版本
 
 编辑 `scripts/prepare` 和 `default.nix` 中的版本号，运行 `npm run setup:asar`
 （下载新版、解包、打补丁），验证后提交刷新的 `scratch/asar`。详见

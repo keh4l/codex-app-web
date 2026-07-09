@@ -1,2 +1,0 @@
-import{a as e}from"./app-scope-DbsKKT7R.js";import{ma as t}from"./app-server-manager-signals-DixsiAkQ.js";function n(n){return e(t,n)}export{n as t};
-//# sourceMappingURL=use-global-state-D4Do97oS.js.map

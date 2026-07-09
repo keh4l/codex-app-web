@@ -1,81 +1,114 @@
-# 升级
+# 升级官方前端
 
-将 codex-web 升级以指向上游 Codex Desktop 新版本的操作说明。
+本文说明如何把 codex-web vendoring 的官方 ChatGPT/Codex Desktop 前端升级到新版本。
 
-## 备份
+官方应用从 `26.707` 起把下载包和外层 Bundle 改名为
+`ChatGPT-darwin-arm64-<version>.zip` 与 `ChatGPT.app`。asar 内部仍可能沿用
+Codex productName、标题、`codex://` scheme 和 `codex_desktop:*` IPC；不要做全局品牌替换。
 
-我们首先生成一个 scratch 目录并对其进行备份。首先，运行以下命令将 `scratch` 目录恢复到一个已知状态
+## 1. 记录基线
 
-```bash
-rm -rf scratch scratch-backup # 删除已有的旧 scratch 目录，从干净状态开始
-DEV=1 nix develop --command yarn run prepare:asar 
-mv scratch scratch-backup
-```
-
-`scratch-backup` 目录保存了已打补丁、可正常工作的 codex-web 版本。在将补丁迁移到新版本时，我们会用它来理解这些补丁原本是在什么上下文中被应用的。
-
-## 更新 URL
-
-接下来有几处需要更新。
-
-1. default.nix 中的 `appVersion` 以及 `codexZip` 中的 `hash`。
-2. ./scripts/prepare 中的 `APP_VERSION`
-
-然后暂时注释掉 ./scripts/prepare_asar 中的补丁行，并运行
+升级前确认工作区状态并保留旧版补丁语义：
 
 ```bash
-DEV=1 nix develop --command yarn run prepare:asar 
-cp -r scratch scratch-new-version-unmodified
+git status --short
+git rev-parse HEAD
 ```
 
-## 升级 codex-cli 版本
+`scratch/asar` 是生成物，最终禁止直接手改。需要研究旧行为时可以复制到仓库外的
+临时目录，但所有可持久化改动都必须表达在 `patches/*.patch`、shim 或构建脚本中。
 
-这一部分可以与升级流程的其余步骤并行进行。在做验证之前，请务必等待它完成。请在子智能体（subagent）中运行它。
+## 2. 固定官方资源
 
-运行以下命令以获取新版 codex-cli 的版本号
+同时更新：
+
+- `scripts/prepare` 的应用版本与 ChatGPT ZIP 名；
+- `scripts/prepare_asar` 的 `ChatGPT.app` 路径和期望版本；
+- `default.nix` 的 `appVersion`、ZIP URL 与 SRI hash。
+
+下载必须使用固定 URL，并先校验 ZIP：
 
 ```bash
-scratch/Codex.app/Contents/Resources/codex --version
+curl --fail --location --retry 3 \
+  -o /tmp/ChatGPT-darwin-arm64-<version>.zip \
+  https://persistent.oaistatic.com/codex-app-prod/ChatGPT-darwin-arm64-<version>.zip
+unzip -tq /tmp/ChatGPT-darwin-arm64-<version>.zip
+printf 'sha256-'
+openssl dgst -sha256 -binary /tmp/ChatGPT-darwin-arm64-<version>.zip | base64
 ```
 
-然后更新 `nix/codex/default.nix` 文件中的 `version` 字段及哈希值，使其指向新版本。
+`scripts/prepare_asar` 应先删除旧 `scratch/asar`、`scratch/Codex.app` 和
+`scratch/ChatGPT.app`，再检查 ZIP 中存在 app.asar、package.json、webview、preload
+以及唯一的 `main-*.js`。这样旧 chunk 不会混入新产物。
 
-## 迁移补丁
+## 3. 同步 Codex CLI
 
-现在我们有几个文件夹
-
-* `scratch-backup`：应用在旧版 Codex Desktop 之上的补丁
-* `scratch-new-version-unmodified`：纯净解压出的新版 Codex Desktop
-* `scratch`：我们将要修改的工作副本
-
-现在仔细查看 `patches/` 中的补丁，以及它们在 `scratch-backup` 中是如何被应用的，并将这些改动迁移到 `scratch`。先直接在源码树（in-tree）中应用它们。暂时不必急于更新补丁本身。
-
-## 更新补丁
-
-一旦改动已在 `scratch` 中完成，将 `scratch` 中的改动与 `scratch-new-version-unmodified` 进行 diff，并更新 `patches/` 中的补丁。务必通过运行 `diff` 来生成补丁，始终避免手动编写补丁，因为很容易出错。
-
-完成后，取消注释 `scripts/prepare_asar` 中的补丁行，并运行
+从新版 Bundle 确认 CLI 版本：
 
 ```bash
-mv scratch scratch-patched-inplace
-rm -rf scratch
-DEV=1 nix develop --command yarn run prepare:asar 
+/Applications/ChatGPT.app/Contents/Resources/codex --version
 ```
 
-然后将 `./scratch-patched-inplace` 与生成的 `./scratch` 进行 diff，以验证补丁是否如预期那样被应用。
+更新 `nix/codex/default.nix` 的版本、四个平台 tarball SRI hash 和包内二进制路径。
+当前 npm 平台包的二进制位于 `package/vendor/*/bin/codex`。每个 tarball 都要实际下载、
+计算 hash，并检查路径；不要复用旧版本哈希。
 
-## 验证
+## 4. 按语义迁移补丁
 
-为了验证一切仍然正常工作，我们将先验证服务端，再验证客户端。开始这一步之前，请务必等待 `升级 codex-cli 版本` 子智能体（subagent）完成。
+在仓库外准备两个从同一官方 app.asar 提取的临时目录：
 
-要验证服务端，运行以下命令
+- `clean`：只做与 `scripts/prepare_asar` 相同的 Prettier 格式化；
+- `modified`：从 clean 复制，逐项恢复现有补丁语义。
+
+逐个阅读旧补丁，不要只按旧 chunk 名搜索。重点检查初始路由/侧栏、URL prompt、
+ProseMirror 输入模式、本地文件 `/@fs`、标题、Statsig、Sentry、PWA/CSP，以及新版
+app-host services。MessagePort RPC、认证、心跳、i18n override 等本 fork 能力必须保留。
+
+用 `diff -u --label a/<path> --label b/<path> clean/<path> modified/<path>` 生成每个
+正式 patch。把 patch 放回 `patches/` 后，在 clean 的副本上按
+`scripts/prepare_asar` 的真实顺序逐个应用，并将结果与 modified 逐字节比较。任何 fuzz、
+reject、遗漏或意外 chunk 都要先修正。
+
+## 5. 从零重建
+
+不要把临时 modified 树复制进 `scratch/asar`。使用固定官方 ZIP 运行真实生成流程：
 
 ```bash
-nix develop --command yarn server
+HOSTED_CODEX_APP_ZIP=/tmp/ChatGPT-darwin-arm64-<version>.zip npm run setup:asar
 ```
 
-接下来，通过在浏览器窗口中打开 `http://localhost:8214` 来验证客户端，并确认页面上的内容能够正常显示。
+确认：
 
-查看控制台是否有报错。同时，留意屏幕上是否弹出了任何报错对话框。有时报错是静默发生的，表现为加载一直卡住（超过 1 分钟）。也要留意这种情况。
+```bash
+node -e 'console.log(require("./scratch/asar/package.json").version)'
+find scratch/asar/.vite/build -maxdepth 1 -name 'main-*.js'
+git status --short
+```
 
-如果出现报错，请将其提交给用户注意，我们将共同决定如何处理。
+生成结果应只有新版本资源；不得残留旧 hash chunk 或外层 `.app` 到最终 Nix 包。
+
+## 6. 验证
+
+先构建，再启动服务：
+
+```bash
+npm run build:server
+npm run build:browser
+npm start
+curl -fsS http://127.0.0.1:8214/
+curl -fsS http://127.0.0.1:8214/assets/preload.js
+```
+
+浏览器至少检查：首屏、新建/恢复任务、设置、桌面与移动侧栏、`?prompt=` 回填、
+文件粘贴/预览、图片、PWA、语言切换、任务标题和原生拖拽降级。控制台与 server 日志
+不能出现未处理异常、关键 404 或 app-host/MessagePort 断连。
+
+有 Nix 环境时还要运行：
+
+```bash
+nix build .#default
+```
+
+确认 ZIP/CLI 固定哈希闭合，包内不含 `scratch/ChatGPT.app`，并且 vendored asar 中的
+`better-sqlite3` 已按打包规则移除/替换。若本机没有 Nix，明确记录该验证未执行，不能
+把普通 npm 构建当作 Nix 构建通过。

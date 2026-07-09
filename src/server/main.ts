@@ -690,9 +690,7 @@ async function startIpcBridgeServer(options: ServerOptions): Promise<void> {
         cookie: request.headers.cookie,
       })
     ) {
-      socket.write(
-        "HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n",
-      );
+      socket.write("HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n");
       socket.destroy();
       return;
     }
@@ -757,7 +755,10 @@ async function startIpcBridgeServer(options: ServerOptions): Promise<void> {
       }
 
       if (message.type === "ipc-renderer-post-message") {
-        bridgeState.handleRendererPostMessage?.(message.channel, message.portId);
+        bridgeState.handleRendererPostMessage?.(
+          message.channel,
+          message.portId,
+        );
         return;
       }
 

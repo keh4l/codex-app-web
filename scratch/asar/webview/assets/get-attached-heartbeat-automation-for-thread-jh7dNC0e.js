@@ -1,2 +1,0 @@
-import{vi as e}from"./src-X9SEQR78.js";function t({automations:t,conversationId:n,includePausedAutomations:r=!1}){return n==null?null:t.find(t=>e(t)&&(t.status===`ACTIVE`||r&&t.status===`PAUSED`)&&t.targetThreadId===n)??null}export{t};
-//# sourceMappingURL=get-attached-heartbeat-automation-for-thread-jh7dNC0e.js.map

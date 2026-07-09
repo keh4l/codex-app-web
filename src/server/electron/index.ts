@@ -388,6 +388,8 @@ function createIpcMainStub(): {
 let appReady = false;
 const commandLineSwitches = new Map<string, string>();
 const commandLineArguments: string[] = [];
+const appLocale =
+  Intl.DateTimeFormat().resolvedOptions().locale || "en-US";
 
 const appBase = {
   ...createEmitterStub("app"),
@@ -403,15 +405,15 @@ const appBase = {
   },
   getLocale(): string {
     log("app.getLocale", []);
-    return "en-US";
+    return appLocale;
   },
   getSystemLocale(): string {
     log("app.getSystemLocale", []);
-    return "en-US";
+    return appLocale;
   },
   getPreferredSystemLanguages(): string[] {
     log("app.getPreferredSystemLanguages", []);
-    return ["en-US"];
+    return [appLocale];
   },
   getPath(name: string): string {
     log("app.getPath", [name]);
@@ -505,6 +507,7 @@ class BrowserWindow {
   static focusedWindow: BrowserWindow | null = null;
   id: number;
   private destroyed = false;
+  private visible = false;
   private title = "Codex";
   private bounds = { x: 0, y: 0, width: 1280, height: 820 };
   webContents: Record<string, unknown>;
@@ -514,6 +517,11 @@ class BrowserWindow {
     log("new BrowserWindow", args);
     this.id = BrowserWindow.nextId++;
     this.emitter = createEmitterStub(`BrowserWindow#${this.id}`);
+    const options =
+      typeof args[0] === "object" && args[0] !== null
+        ? (args[0] as { focusable?: boolean; show?: boolean })
+        : {};
+    this.visible = options.show !== false;
 
     const webContentsEmitter = createEmitterStub(
       `BrowserWindow#${this.id}.webContents`,
@@ -576,7 +584,9 @@ class BrowserWindow {
     );
 
     BrowserWindow.allWindows.push(this);
-    BrowserWindow.focusedWindow = this;
+    if (this.visible && options.focusable !== false) {
+      this.focus();
+    }
     return new Proxy(this, {
       get: (target, prop) => {
         if (prop in target) {
@@ -599,10 +609,7 @@ class BrowserWindow {
 
   static getFocusedWindow(): BrowserWindow | null {
     log("BrowserWindow.getFocusedWindow", []);
-    if (
-      BrowserWindow.focusedWindow &&
-      !BrowserWindow.focusedWindow.destroyed
-    ) {
+    if (BrowserWindow.focusedWindow && !BrowserWindow.focusedWindow.destroyed) {
       return BrowserWindow.focusedWindow;
     }
     return BrowserWindow.getAllWindows()[0] ?? null;
@@ -652,7 +659,7 @@ class BrowserWindow {
   destroy(): void {
     log(`BrowserWindow#${this.id}.destroy`, []);
     this.destroyed = true;
-    if (BrowserWindow.focusedWindow === this) {
+    if (BrowserWindow.focusedWindow?.id === this.id) {
       BrowserWindow.focusedWindow = null;
     }
     this.emitter.emit("closed");
@@ -699,14 +706,42 @@ class BrowserWindow {
 
   show(): void {
     log(`BrowserWindow#${this.id}.show`, []);
+    this.focus();
   }
 
   hide(): void {
     log(`BrowserWindow#${this.id}.hide`, []);
+    this.visible = false;
+    if (BrowserWindow.focusedWindow?.id === this.id) {
+      BrowserWindow.focusedWindow = null;
+      this.emitter.emit("blur");
+    }
+  }
+
+  isVisible(): boolean {
+    log(`BrowserWindow#${this.id}.isVisible`, []);
+    return this.visible;
+  }
+
+  isFocused(): boolean {
+    log(`BrowserWindow#${this.id}.isFocused`, []);
+    return BrowserWindow.focusedWindow?.id === this.id && !this.destroyed;
   }
 
   focus(): void {
     log(`BrowserWindow#${this.id}.focus`, []);
+    this.visible = true;
+    const previouslyFocused = BrowserWindow.focusedWindow;
+    if (
+      previouslyFocused &&
+      previouslyFocused.id !== this.id &&
+      !previouslyFocused.destroyed
+    ) {
+      previouslyFocused.emitter.emit("blur");
+    }
+    if (previouslyFocused?.id === this.id) {
+      return;
+    }
     BrowserWindow.focusedWindow = this;
     this.emitter.emit("focus");
   }
@@ -887,10 +922,7 @@ const net = {
   async fetch(input: string | URL, init?: RequestInit): Promise<Response> {
     // log("net.fetch", [input, init]);
     if (typeof globalThis.fetch === "function") {
-      const response = await globalThis.fetch(
-        input as URL | RequestInfo,
-        init,
-      );
+      const response = await globalThis.fetch(input as URL | RequestInfo, init);
       return patchReferralEligibility(input, response);
     }
     return new Response("", { status: 204 });
@@ -1059,14 +1091,19 @@ function createSessionStub(label: string): {
     },
   };
 }
-const partitionSessions = new Map<string, ReturnType<typeof createSessionStub>>();
+const partitionSessions = new Map<
+  string,
+  ReturnType<typeof createSessionStub>
+>();
 const session = {
   defaultSession: createSessionStub("session.defaultSession"),
   fromPartition(partition: string): ReturnType<typeof createSessionStub> {
     log("session.fromPartition", [partition]);
     let partitionSession = partitionSessions.get(partition);
     if (!partitionSession) {
-      partitionSession = createSessionStub(`session.fromPartition(${partition})`);
+      partitionSession = createSessionStub(
+        `session.fromPartition(${partition})`,
+      );
       partitionSessions.set(partition, partitionSession);
     }
     return partitionSession;
