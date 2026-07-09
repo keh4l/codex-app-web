@@ -1,8 +1,39 @@
 #!/usr/bin/env bash
 set -euxo pipefail
 
+: "${HOSTED_CODEX_APP_ZIP:?HOSTED_CODEX_APP_ZIP must point to the official ChatGPT zip}"
+
+APP_BUNDLE="scratch/ChatGPT.app"
+APP_ASAR="$APP_BUNDLE/Contents/Resources/app.asar"
+
+# Rebuild from a clean tree. Leaving the previous extracted asar in place can
+# silently retain chunks that disappeared upstream and make a broken upgrade
+# look healthy in development.
+rm -rf scratch/asar scratch/Codex.app scratch/ChatGPT.app
+mkdir -p scratch
 unzip -o "$HOSTED_CODEX_APP_ZIP" -d scratch/
-asar extract "scratch/Codex.app/Contents/Resources/app.asar" "scratch/asar"
+if [[ ! -f "$APP_ASAR" ]]; then
+  echo "expected official app archive at $APP_ASAR" >&2
+  exit 1
+fi
+
+asar extract "$APP_ASAR" "scratch/asar"
+
+shopt -s nullglob
+main_bundles=(scratch/asar/.vite/build/main-*.js)
+shopt -u nullglob
+if [[ ! -f scratch/asar/package.json || ! -f scratch/asar/webview/index.html || ! -f scratch/asar/.vite/build/preload.js || ${#main_bundles[@]} -ne 1 ]]; then
+  echo "official app archive is missing an expected package, webview, preload, or unique main entry" >&2
+  exit 1
+fi
+
+node -e '
+  const packageJson = require("./scratch/asar/package.json");
+  if (packageJson.version !== "26.707.30751") {
+    throw new Error(`unexpected ChatGPT app version: ${packageJson.version}`);
+  }
+'
+
 cp assets/* scratch/asar/webview/
 PWA_SOURCE_ICON="scratch/asar/webview/assets/app-D0g8sCle.png"
 PWA_TARGET_ICON="scratch/asar/webview/assets/pwa-icon-512.png"

@@ -144,6 +144,24 @@ type ElectronShimState = {
   initialRoute?: string;
   initialSidebarState?: boolean;
   closeSidebar?: () => void;
+  services?: {
+    requestUserInputAutoResolution?: {
+      recordConversationActivity?: (args: {
+        conversationId: string;
+        hostId: string;
+      }) => void;
+      setConversationPresented?: (args: {
+        conversationId: string;
+        hostId: string;
+        presented: boolean;
+      }) => void;
+      snooze?: (args: {
+        conversationId: string;
+        hostId: string;
+        requestId: string;
+      }) => void;
+    };
+  };
   onMemoryNavigationChanged?: (navigation: MemoryNavigationChange) => void;
   overrideAdapter?: {
     getGateOverride?: (
@@ -448,6 +466,19 @@ const mobileMediaQuery = matchMedia("(max-width: 768px)");
 const initialSidebarState = !mobileMediaQuery.matches;
 const electronShim = (window.__ELECTRON_SHIM__ ??= {});
 
+// The hosted app shell gained this service group in 26.623. Browser hosting
+// has no native presentation lifecycle, so expose deliberate no-ops rather
+// than letting optional service lookups fail during shell initialization.
+electronShim.services = {
+  ...electronShim.services,
+  requestUserInputAutoResolution: {
+    ...electronShim.services?.requestUserInputAutoResolution,
+    recordConversationActivity: () => undefined,
+    setConversationPresented: () => undefined,
+    snooze: () => undefined,
+  },
+};
+
 // Statsig layer "72216192" carries `enable_i18n`, the flag that gates loading
 // translated UI messages. It is delivered by the live Statsig service, which
 // this deployment intentionally never reaches (telemetry is silenced and the
@@ -628,6 +659,12 @@ export const ipcRenderer = {
       return false;
     }
 
+    if (channel === "codex_desktop:start-file-drag") {
+      // Native Electron can synchronously start an OS drag session. A browser
+      // cannot reproduce that contract and must not block on websocket RPC.
+      return false;
+    }
+
     if (channel === "codex_desktop:get-shared-object-snapshot") {
       return {
         host_config: {
@@ -636,11 +673,16 @@ export const ipcRenderer = {
           kind: "local",
         },
         remote_connections: [],
+        remote_ssh_connections: [],
+        remote_wsl_connections: [],
         remote_control_connections: [],
         remote_control_connections_state: {
           available: false,
+          accessRequired: false,
           authRequired: false,
+          clientAuthorized: false,
         },
+        local_remote_control_client_id: null,
         pending_worktrees: [],
         statsig_default_enable_features: {
           enable_request_compression: true,
