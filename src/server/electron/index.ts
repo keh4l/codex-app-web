@@ -446,11 +446,23 @@ const appBase = {
   },
   isReady(): boolean {
     log("app.isReady", []);
+    // Keep false until explicitly marked. Sentry Electron throws if
+    // isReady() is already true during init; the previous stub set
+    // appReady=true on the first whenReady() call, which aborted
+    // runMainAppStartup and left the webview on the startup loader.
     return appReady;
   },
   whenReady(): Promise<void> {
     log("app.whenReady", []);
-    appReady = true;
+    // Real Electron: whenReady waits for the ready event; calling it does
+    // not make the app ready. Resolve immediately for the headless host
+    // without flipping isReady(), then mark ready on the next macrotask so
+    // any still-synchronous init (including Sentry) still sees !isReady().
+    if (!appReady) {
+      setImmediate(() => {
+        appReady = true;
+      });
+    }
     return Promise.resolve();
   },
   commandLine: {
@@ -1031,6 +1043,12 @@ const protocol = {
   },
 };
 function createSessionStub(label: string): {
+  cookies: ReturnType<typeof createEmitterStub> & {
+    get: (...args: unknown[]) => Promise<unknown[]>;
+    set: (...args: unknown[]) => Promise<void>;
+    remove: (...args: unknown[]) => Promise<void>;
+    flushStore: (...args: unknown[]) => Promise<void>;
+  };
   getUserAgent: () => string;
   loadExtension: (extensionPath: string) => Promise<{
     id: string;
@@ -1069,6 +1087,22 @@ function createSessionStub(label: string): {
     getUserAgent(): string {
       log(`${label}.getUserAgent`, []);
       return "Mozilla/5.0 AppleWebKit/537.36 Chrome/120 Safari/537.36";
+    },
+    cookies: {
+      ...createEmitterStub(`${label}.cookies`),
+      async get(...args: unknown[]): Promise<unknown[]> {
+        log(`${label}.cookies.get`, args);
+        return [];
+      },
+      async set(...args: unknown[]): Promise<void> {
+        log(`${label}.cookies.set`, args);
+      },
+      async remove(...args: unknown[]): Promise<void> {
+        log(`${label}.cookies.remove`, args);
+      },
+      async flushStore(...args: unknown[]): Promise<void> {
+        log(`${label}.cookies.flushStore`, args);
+      },
     },
     off: emitter.off,
     on: emitter.on,

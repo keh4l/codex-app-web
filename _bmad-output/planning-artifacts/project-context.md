@@ -28,7 +28,7 @@ _本文件是 AI 智能体在 codex-web 中写代码前必须遵守的关键规�
 - **后端**：Fastify `^5.8.5`、`ws` `^8.20.0`、`@fastify/multipart`、`@fastify/static`、`better-sqlite3` `^12.9.0`、`glob`。
 - **前端/preload 构建**：Vite `^8.0.8`，React `^19.2`（**仅** `src/browser/` 的工作区对话框等组件使用；vendored 前端自带 React，勿混淆）。
 - **Electron**：`42.1.0` 仅 devDependency，用于 `launch:unpacked` 调试，**生产路径不跑 Electron**。
-- **Vendored 前端**：`scratch/asar`，官方 ChatGPT app 版本 **26.707.30751**（见 `scripts/prepare`）。外层 archive/Bundle 是 `ChatGPT-darwin-arm64-*.zip` / `ChatGPT.app`；asar 内 productName、title、URL scheme 和 `codex_desktop:*` 协议仍是 Codex，禁止全局改名。
+- **Vendored 前端**：`scratch/asar`，官方 ChatGPT app 版本 **26.715.72359**（见 `scripts/prepare`）。外层 archive/Bundle 是 `ChatGPT-darwin-arm64-*.zip` / `ChatGPT.app`；asar 内 productName、title、URL scheme 和 `codex_desktop:*` 协议仍是 Codex，禁止全局改名。
 
 ## 2. 架构心智模型（动手前必须建立）
 

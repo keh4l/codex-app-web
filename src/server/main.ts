@@ -240,12 +240,10 @@ const LOGIN_MAX_FAILURES_PER_WINDOW = 10;
 // don't accumulate in the broadcast set.
 const WS_KEEPALIVE_INTERVAL_MS = 30 * 1000;
 
-// 带内容 hash 的静态资源（Vite 输出 name-HASH.ext，HASH 为 8+ 位 base64url，
-// 可含 - 和 _）内容不可变，命中即可长期强缓存（二次访问零请求、连 304 校验都
-// 省掉）。固定名文件（preload.js / dotnet.js 等升级后名字不变、内容会变的）不
-// 匹配此式，退化为 no-cache 每次校验——漏判只损失缓存、误判才会发旧版给客户端，
-// 故按「宁漏勿误」取保守式（仅认 -HASH，点分隔 hash 的按需 .NET wasm 退化为
-// no-cache，它们非首屏，无影响）。
+// 上游 Vite 资源名带内容 hash，但本仓库会在相同文件名下打 patch / 重抽 asar，
+// 因此「hash 不变 ⇒ 内容不可变」不成立。若再发 immutable，浏览器会把错误的
+// 旧内容（例如非法 defaultText 解构）锁一年，表现为加载页 SyntaxError。
+// 一律 no-cache：浏览器每次校验，本地改 asar 后刷新即可拿到新文件。
 const HASHED_ASSET_RE = /-[A-Za-z0-9_-]{8,}\.[a-z0-9]+(\.map)?$/i;
 
 function resolveAuthConfig(): AuthConfig | null {
@@ -623,9 +621,12 @@ async function startIpcBridgeServer(options: ServerOptions): Promise<void> {
     // 缓存策略自己用 setHeaders 全权决定，关掉默认的 max-age=0。
     cacheControl: false,
     setHeaders: (res, filePath) => {
+      // Prefer explicit opt-in only: CODEX_WEB_IMMUTABLE_ASSETS=1 restores the
+      // production-style long cache for true content-addressed deploys.
+      const allowImmutable = process.env.CODEX_WEB_IMMUTABLE_ASSETS === "1";
       res.setHeader(
         "cache-control",
-        HASHED_ASSET_RE.test(path.basename(filePath))
+        allowImmutable && HASHED_ASSET_RE.test(path.basename(filePath))
           ? "public, max-age=31536000, immutable"
           : "no-cache",
       );
@@ -647,13 +648,19 @@ async function startIpcBridgeServer(options: ServerOptions): Promise<void> {
   }
   // index.html 绝不能强缓存：它引用带 hash 的 assets，部署后必须立刻拿到新版，
   // 否则会一直加载旧 hash 的资源。no-cache 让浏览器每次校验后再用。
+  // Clear-Site-Data 清掉本源下曾被 immutable 锁死的错误 chunk（同 hash 打
+  // patch 后 Chrome 可能一年不重拉）。localhost 支持该头。
   const sendIndexHtml = (reply: FastifyReply) =>
     injectedIndexHtml
       ? reply
           .type("text/html; charset=utf-8")
           .header("cache-control", "no-cache")
+          .header("Clear-Site-Data", '"cache"')
           .send(injectedIndexHtml)
-      : reply.sendFile("index.html");
+      : reply
+          .header("cache-control", "no-cache")
+          .header("Clear-Site-Data", '"cache"')
+          .sendFile("index.html");
 
   app.get("/", async (_request, reply) => {
     return sendIndexHtml(reply);

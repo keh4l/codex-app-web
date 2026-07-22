@@ -48,7 +48,7 @@ npm start            # 加载 .env，然后启动 server
 打开 <http://127.0.0.1:8214>。macOS 上 `CODEX_CLI_PATH` 推荐直接用官方桌面应用自带的
 二进制：`/Applications/ChatGPT.app/Contents/Resources/codex`（已登录的话凭据直接复用）。
 
-当前 vendoring 的官方应用版本为 `26.707.30751`。该版本的下载包和外层 Bundle 已改名为
+当前 vendoring 的官方应用版本为 `26.715.72359`。该版本的下载包和外层 Bundle 已改名为
 `ChatGPT-darwin-arm64-*.zip` / `ChatGPT.app`，但 asar 内的 productName、页面标题、
 `codex://` scheme 和 `codex_desktop:*` IPC 仍沿用 Codex；升级时不要全局替换内部名称。
 
