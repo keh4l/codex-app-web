@@ -503,6 +503,19 @@ electronShim.overrideAdapter = {
       };
     }
 
+    // Desktop settings parity while Statsig network is silenced.
+    if (
+      e.name === "3693343337" || // Model features section
+      e.name === "1186680773" || // include Ultra reasoning effort
+      e.name === "3026692602" || // workspace dependencies section
+      e.name === "2106641128" // experimental features under agent settings
+    ) {
+      return {
+        ...e,
+        value: true,
+      };
+    }
+
     return null;
   },
   getLayerOverride(e) {
@@ -708,6 +721,13 @@ export const ipcRenderer = {
 
     if (channel === "codex_desktop:get-system-theme-variant") {
       return themeMediaQuery.matches ? "dark" : "light";
+    }
+
+    if (channel === "codex_desktop:get-initial-sidebar-bootstrap") {
+      // 26.803+: sidebar reads this synchronously during first paint. Main may
+      // return null when no window host is ready; mirror that so React does not
+      // throw on the unimplemented sendSync path.
+      return null;
     }
 
     return unimplemented("ipcRenderer.sendSync");

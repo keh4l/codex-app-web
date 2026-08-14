@@ -13151,6 +13151,10 @@ var init_shim = __esmMin((() => {
 				...e,
 				value: false
 			};
+			if (e.name === "3693343337" || e.name === "1186680773" || e.name === "3026692602" || e.name === "2106641128") return {
+				...e,
+				value: true
+			};
 			return null;
 		},
 		getLayerOverride(e) {
@@ -13252,7 +13256,7 @@ var init_shim = __esmMin((() => {
 				codexAppSessionId: "42626fde-7064-471f-b44d-b1a7ad849c7f",
 				buildFlavor,
 				buildNumber: null,
-				appVersion: "26.715.72359",
+				appVersion: "26.803.41515",
 				enabled: false
 			};
 			if (channel === "codex_desktop:get-build-flavor") return buildFlavor;
@@ -13296,6 +13300,7 @@ var init_shim = __esmMin((() => {
 				}
 			};
 			if (channel === "codex_desktop:get-system-theme-variant") return themeMediaQuery.matches ? "dark" : "light";
+			if (channel === "codex_desktop:get-initial-sidebar-bootstrap") return null;
 			return unimplemented("ipcRenderer.sendSync");
 		}
 	};
@@ -13316,214 +13321,106 @@ function t(e) {
 function n(e) {
 	return typeof e != `object` || !e || !(`type` in e) ? !1 : e.type === `array-start` || e.type === `object-start` || e.type === `container-end` || e.type === `string-end` ? !0 : e.type === `string-start` ? `target` in e && (e.target === `key` || e.target === `value`) : e.type === `key` || e.type === `string-chunk` ? `value` in e && typeof e.value == `string` : e.type === `value` ? `value` in e ? e.value == null || typeof e.value == `boolean` || typeof e.value == `number` || typeof e.value == `string` : !0 : !1;
 }
-var r = Symbol(`unset`), i = class {
-	transfers = /* @__PURE__ */ new Map();
-	receive(e) {
-		if (!t(e)) return {
-			type: `passthrough`,
-			message: e
-		};
-		if (e.kind === `start`) {
-			this.transfers.clear();
-			let t = {
-				assembler: new a(),
-				nextSequence: e.sequence + 1
-			};
-			return this.transfers.set(e.transferId, t), {
-				type: `pending`,
-				acknowledgement: o(e)
-			};
-		}
-		let n = this.transfers.get(e.transferId);
-		return n == null || e.sequence !== n.nextSequence ? (this.transfers.delete(e.transferId), {
-			type: `pending`,
-			acknowledgement: null
-		}) : (n.nextSequence += 1, e.kind === `chunk` ? (n.assembler.consume(e.tokens), {
-			type: `pending`,
-			acknowledgement: o(e)
-		}) : (this.transfers.delete(e.transferId), {
-			type: `complete`,
-			message: n.assembler.finish(),
-			acknowledgement: o(e)
-		}));
-	}
-}, a = class {
-	stack = [];
-	root = r;
-	stringChunks = null;
-	stringTarget = null;
-	consume(e) {
-		for (let t of e) switch (t.type) {
-			case `array-start`: {
-				let e = [];
-				this.saveValue(e), this.stack.push({
-					type: `array`,
-					value: e
-				});
-				break;
-			}
-			case `object-start`: {
-				let e = {};
-				this.saveValue(e), this.stack.push({
-					type: `object`,
-					value: e,
-					key: null
-				});
-				break;
-			}
-			case `container-end`:
-				if (this.stack.pop() == null) throw Error(`Chunked message contained an unmatched container end`);
-				break;
-			case `key`:
-				this.setKey(t.value);
-				break;
-			case `value`:
-				this.saveValue(t.value);
-				break;
-			case `string-start`:
-				if (this.stringChunks != null) throw Error(`Chunked message contained nested string chunks`);
-				this.stringChunks = [], this.stringTarget = t.target;
-				break;
-			case `string-chunk`:
-				if (this.stringChunks == null) throw Error(`Chunked message string chunk had no start token`);
-				this.stringChunks.push(t.value);
-				break;
-			case `string-end`: {
-				if (this.stringChunks == null || this.stringTarget == null) throw Error(`Chunked message string end had no start token`);
-				let e = this.stringChunks.join(``), t = this.stringTarget;
-				this.stringChunks = null, this.stringTarget = null, t === `key` ? this.setKey(e) : this.saveValue(e);
-				break;
-			}
-		}
-	}
-	finish() {
-		if (this.root === r || this.stack.length > 0 || this.stringChunks != null) throw Error(`Chunked message ended before its value was complete`);
-		return this.root;
-	}
-	setKey(e) {
-		let t = this.stack.at(-1);
-		if (t?.type !== `object` || t.key != null) throw Error(`Chunked message key was outside an object`);
-		t.key = e;
-	}
-	saveValue(e) {
-		let t = this.stack.at(-1);
-		if (t == null) {
-			if (this.root !== r) throw Error(`Chunked message contained multiple root values`);
-			this.root = e;
-			return;
-		}
-		if (t.type === `array`) {
-			t.value.push(e);
-			return;
-		}
-		if (t.key == null) throw Error(`Chunked message object value had no key`);
-		Object.defineProperty(t.value, t.key, {
-			configurable: !0,
-			enumerable: !0,
-			value: e,
-			writable: !0
-		}), t.key = null;
-	}
-};
-function o(e) {
-	return {
-		transferId: e.transferId,
-		sequence: e.sequence
-	};
-}
-var s = `codex_desktop:chunked-message-ack`, c = `codex_desktop:mcp-app-sandbox-host-message`, l = `codex_desktop:show-context-menu`, u = `codex_desktop:show-application-menu`, d = `codex_desktop:get-sentry-init-options`, f = `codex_desktop:get-build-flavor`, p = `codex_desktop:get-uses-owl-app-shell`, m = `codex_desktop:get-system-theme-variant`, h = `codex_desktop:get-fast-mode-rollout-metrics`, g = `codex_desktop:system-theme-variant-updated`, _ = `codex_desktop:trigger-sentry-test`, v = `codex_desktop:connect-app-host`, y = `codex_desktop:start-file-drag`;
-function b(e) {
+var r = `codex_desktop:chunked-message-ack`, i = `codex_desktop:mcp-app-sandbox-host-message`, a = `codex_desktop:show-context-menu`, o = `codex_desktop:get-sentry-init-options`, s = `codex_desktop:get-build-flavor`, c = `codex_desktop:get-uses-owl-app-shell`, l = `codex_desktop:get-system-theme-variant`, u = `codex_desktop:get-initial-sidebar-bootstrap`, d = `codex_desktop:get-fast-mode-rollout-metrics`, f = `codex_desktop:system-theme-variant-updated`, p = `codex_desktop:trigger-sentry-test`, m = `codex_desktop:connect-app-host`, h = `codex_desktop:start-file-drag`;
+function g(e) {
 	return `codex_desktop:worker:${e}:from-view`;
 }
-function x(e) {
+function _(e) {
 	return `codex_desktop:worker:${e}:for-view`;
 }
-var S = performance.timeOrigin, C = `electron`, w = `codex_desktop:message-from-view`, T = `codex_desktop:message-for-view`, E = e.ipcRenderer.sendSync(d), D = e.ipcRenderer.sendSync(f), O = e.ipcRenderer.sendSync(p) === !0, k = e.ipcRenderer.sendSync(`codex_desktop:get-shared-object-snapshot`) ?? {}, A = e.ipcRenderer.sendSync(m), j = A === `dark` ? `electron-dark` : `electron-light`, M = document.documentElement;
-if (M != null) M.classList.add(j);
+var v = {
+	darwin: `Mac OS`,
+	linux: `X11; Linux`,
+	win32: `Windows NT 10.0`
+};
+function y({ appVersion: e, platform: t = process.platform, arch: n = process.arch }) {
+	return `Codex Desktop/${e} (${v[t] ?? t}; ${n})`;
+}
+var b = performance.timeOrigin, x = `electron`, S = `codex_desktop:message-from-view`, C = `codex_desktop:message-for-view`, w = e.ipcRenderer.sendSync(o), T = e.ipcRenderer.sendSync(s), E = e.ipcRenderer.sendSync(c) === !0, D = e.ipcRenderer.sendSync(`codex_desktop:get-shared-object-snapshot`) ?? {}, O = e.ipcRenderer.sendSync(l), k = O === `dark` ? `electron-dark` : `electron-light`, A = document.documentElement;
+if (A != null) A.classList.add(k);
 else {
 	let e = new MutationObserver(() => {
 		let t = document.documentElement;
-		t != null && (t.classList.add(j), e.disconnect());
+		t != null && (t.classList.add(k), e.disconnect());
 	});
 	e.observe(document, { childList: !0 });
 }
-var N = () => A, P = /* @__PURE__ */ new Set(), F = new i();
-e.ipcRenderer.on(g, (e, t) => {
-	A = t, P.forEach((e) => {
+var j = () => O, M = /* @__PURE__ */ new Set(), N;
+e.ipcRenderer.on(f, (e, t) => {
+	O = t, M.forEach((e) => {
 		e();
 	});
 });
-function I(e, t) {
+function P(e, t) {
 	if (t === void 0) {
-		delete k[e];
+		delete D[e];
 		return;
 	}
-	k[e] = t;
+	D[e] = t;
 }
-var L = /* @__PURE__ */ new Map(), R = /* @__PURE__ */ new Map(), z = {
-	windowType: C,
-	getPreloadStartedAtMs: () => S,
+var F = /* @__PURE__ */ new Map(), I = /* @__PURE__ */ new Map(), L = {
+	windowType: x,
+	acknowledgeChunkedMessage: (t, n) => {
+		e.ipcRenderer.send(r, t, n);
+	},
+	getPreloadStartedAtMs: () => b,
 	sendMessageFromView: async (t) => {
-		t.type === `shared-object-set` && I(t.key, t.value), await e.ipcRenderer.invoke(w, t);
+		t.type === `shared-object-set` && P(t.key, t.value), await e.ipcRenderer.invoke(S, t);
 	},
 	getPathForFile: (t) => e.webUtils.getPathForFile(t) || null,
-	startFileDrag: (t) => e.ipcRenderer.sendSync(y, t) === !0,
+	startFileDrag: (t) => e.ipcRenderer.sendSync(h, t) === !0,
 	sendWorkerMessageFromView: async (t, n) => {
-		await e.ipcRenderer.invoke(b(t), n);
+		await e.ipcRenderer.invoke(g(t), n);
 	},
 	subscribeToWorkerMessages: (t, n) => {
-		let r = L.get(t);
-		r || (r = /* @__PURE__ */ new Set(), L.set(t, r));
-		let i = R.get(t);
+		let r = F.get(t);
+		r || (r = /* @__PURE__ */ new Set(), F.set(t, r));
+		let i = I.get(t);
 		return i || (i = (e, n) => {
-			let r = L.get(t);
+			let r = F.get(t);
 			r && r.forEach((e) => {
 				e(n);
 			});
-		}, R.set(t, i), e.ipcRenderer.on(x(t), i)), r.add(n), () => {
-			let r = L.get(t);
+		}, I.set(t, i), e.ipcRenderer.on(_(t), i)), r.add(n), () => {
+			let r = F.get(t);
 			if (!r || (r.delete(n), r.size > 0)) return;
-			L.delete(t);
-			let i = R.get(t);
-			i && e.ipcRenderer.removeListener(x(t), i), R.delete(t);
+			F.delete(t);
+			let i = I.get(t);
+			i && e.ipcRenderer.removeListener(_(t), i), I.delete(t);
 		};
 	},
-	showContextMenu: async (t) => e.ipcRenderer.invoke(l, t),
-	showApplicationMenu: async (t, n, r) => {
-		await e.ipcRenderer.invoke(u, {
-			menuId: t,
-			x: n,
-			y: r
-		});
-	},
-	getFastModeRolloutMetrics: async (t) => e.ipcRenderer.invoke(h, t),
-	getSharedObjectSnapshotValue: (e) => k[e],
-	getSystemThemeVariant: N,
-	subscribeToSystemThemeVariant: (e) => (P.add(e), () => {
-		P.delete(e);
+	showContextMenu: async (t) => e.ipcRenderer.invoke(a, t),
+	getFastModeRolloutMetrics: async (t) => e.ipcRenderer.invoke(d, t),
+	getSharedObjectSnapshotValue: (e) => D[e],
+	getInitialSidebarBootstrap: () => (N === void 0 && (N = e.ipcRenderer.sendSync(u)), N),
+	getSystemThemeVariant: j,
+	subscribeToSystemThemeVariant: (e) => (M.add(e), () => {
+		M.delete(e);
 	}),
 	triggerSentryTestError: async () => {
-		await e.ipcRenderer.invoke(_);
+		await e.ipcRenderer.invoke(p);
 	},
-	getSentryInitOptions: () => E,
-	getAppSessionId: () => E.codexAppSessionId,
-	getBuildFlavor: () => D,
+	getSentryInitOptions: () => w,
+	getDesktopUserAgent: () => y({ appVersion: w.appVersion }),
+	getAppSessionId: () => w.codexAppSessionId,
+	getBuildFlavor: () => T,
 	isDeviceCheckSupported: () => process.platform === `darwin` && process.arch === `arm64`,
 	isIntelMacBuild: () => process.platform === `darwin` && process.arch === `x64`,
-	usesOwlAppShell: () => O
+	usesOwlAppShell: () => E
 };
-e.ipcRenderer.on(T, (t, n) => {
-	let r = F.receive(n);
-	if (r.type !== `passthrough` && r.acknowledgement != null && e.ipcRenderer.send(s, r.acknowledgement.transferId, r.acknowledgement.sequence), r.type === `pending`) return;
-	let i = r.message, a = i;
-	a.type === `shared-object-updated` && I(a.key, a.value), window.dispatchEvent(new MessageEvent(`message`, { data: i }));
-}), e.ipcRenderer.on(c, (e, t) => {
+e.ipcRenderer.on(C, (e, n) => {
+	if (!t(n)) {
+		let e = n;
+		e.type === `shared-object-updated` && P(e.key, e.value);
+	}
+	window.dispatchEvent(new MessageEvent(`message`, { data: n }));
+}), e.ipcRenderer.on(i, (e, t) => {
 	let n = window.location.origin;
 	n !== `null` && window.postMessage(t, n, e.ports);
-}), e.contextBridge.exposeInMainWorld(`codexWindowType`, C), e.contextBridge.exposeInMainWorld(`electronBridge`, z), typeof window < `u` && window.addEventListener(`message`, (t) => {
+}), e.contextBridge.exposeInMainWorld(`codexWindowType`, x), e.contextBridge.exposeInMainWorld(`electronBridge`, L), typeof window < `u` && window.addEventListener(`message`, (t) => {
 	if (t.source !== window || t.data?.type !== `connect-app-host`) return;
 	let { port: n } = t.data;
-	e.ipcRenderer.postMessage(v, void 0, [n]);
+	e.ipcRenderer.postMessage(m, void 0, [n]);
 });
 //#endregion
 
