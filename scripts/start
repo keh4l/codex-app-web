@@ -7,11 +7,6 @@ set -euo pipefail
 # process.loadEnvFile inside main.ts) because some variables — notably
 # NODE_USE_ENV_PROXY — are read by node during bootstrap, before any user code
 # runs. Setting them after the process has started is too late.
-#
-# Compiled server JS under src/server/** is gitignored. Always rebuild before
-# start so `git pull && npm start` (or systemd Restart) cannot keep running a
-# stale electron stub — that previously left net.isOnline missing and broke
-# live turn streaming until a manual `npm run build:server`.
 
 cd "$(dirname "$0")/.."
 
@@ -20,13 +15,6 @@ if [ -f .env ]; then
   # shellcheck disable=SC1091
   . ./.env
   set +a
-fi
-
-npm run build:server
-
-if ! grep -q 'isOnline()' src/server/electron/index.js; then
-  echo "error: src/server/electron/index.js is missing net.isOnline(); build may have failed" >&2
-  exit 1
 fi
 
 exec node src/server/main.js "$@"

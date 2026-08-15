@@ -104,14 +104,7 @@ HOST="0.0.0.0"   # 需要从其他机器访问时设置；注意阅读下方“�
 ### 4. 启动
 
 ```bash
-npm start        # 会先 `build:server` 再启动（src/server/**/*.js 不进 git，必须本机编译）
-```
-
-升级后若只 `git pull` 再重启、却没走到 `npm start`/`npm run build:server`，
-会继续跑旧的 electron stub（例如缺 `net.isOnline`），表现为发消息后没有实时流式输出、刷新才看得到回复。启动日志里应出现：
-
-```text
-[codex-web] electron stub: net.isOnline ok
+npm start        # 前台运行，先验证一切正常
 ```
 
 浏览器打开 `http://服务器IP:8214` 确认页面可用后，再配置常驻服务。
@@ -153,7 +146,6 @@ journalctl -u codex-web -f      # 跟踪日志
 | `Unable to locate the Codex CLI binary` | 服务进程的 PATH 没有 codex，且 `CODEX_CLI_PATH` 未设或路径错。按上文用 `find` 找到原生 ELF 二进制，绝对路径填进 `.env`，重启。 |
 | 登录相关报错 / 提示未登录 | `codex login` 的凭据存在 `~/.codex/auth.json`，跟用户绑定。服务运行用户（systemd 的 `User=`）必须与执行过 login 的用户一致。 |
 | UI 启动页卡约 10 秒才进主界面 | 服务器连不上 `ab.chatgpt.com`（Statsig 超时后才降级）。在 `.env` 打开代理四件套（`NODE_USE_ENV_PROXY` / `HTTP_PROXY` / `HTTPS_PROXY` / `NO_PROXY`），并务必经 `npm start` 启动（直接 `node src/server/main.js` 时代理变量不生效，node 在 bootstrap 阶段就读取它们）。 |
-| 发消息后不实时出字，刷新才看到回复 | 多半在跑旧的 `src/server/**/*.js`（不进 git）。确认 `ExecStart` 走 `scripts/start`，重启后日志有 `[codex-web] electron stub: net.isOnline ok`，且没有 `net.isOnline is not a function`。也可手动 `npm run build:server && sudo systemctl restart codex-web`。 |
 | `npm install` 在 better-sqlite3 处报错 | 缺编译工具链：`sudo apt install build-essential python3`（macOS：`xcode-select --install`）。 |
 | 升级 `@openai/codex` 后又找不到二进制 | npm 包内部路径随版本变化，重新 `find` 并更新 `.env` 的 `CODEX_CLI_PATH`。 |
 

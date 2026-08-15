@@ -1085,9 +1085,6 @@ const net = {
   },
 };
 
-// Boot marker so deploy logs prove the rebuilt stub is loaded (index.js is gitignored).
-console.log("[codex-web] electron stub: net.isOnline ok");
-
 const autoUpdater = createEmitterStub("autoUpdater");
 const ipcMain = createIpcMainStub();
 const nativeTheme = {
