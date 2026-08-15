@@ -38,18 +38,6 @@ FIXES: list[tuple[str, str, str, str]] = [
         "a.current??=Uin({initialEntries:n,initialIndex:r,v5Compat:!0});let o=a.current,[s,c]=IC.useState({action:o.action,location:o.location}),l=IC.useCallback(e=>{i===!1?c(e):IC.startTransition(()=>c(e))},[i]);",
         "a.current??=Uin({initialEntries:n??[window.__ELECTRON_SHIM__.initialRoute],initialIndex:r,v5Compat:!0});let o=a.current,[s,c]=IC.useState({action:o.action,location:o.location}),l=IC.useCallback(e=>{window.__ELECTRON_SHIM__.onMemoryNavigationChanged(e);i===!1?c(e):IC.startTransition(()=>c(e))},[i]);",
     ),
-    # Hosted single-window: canBroadcastPatchesToFollowers is false, so
-    # applyFrameTextDeltas took the knownChangedItems short-circuit. That path
-    # only pokes item:${entityKey} listeners; the timeline often subscribes as
-    # item:turn:${turnId}, so agentMessage/reasoning deltas mutate state but
-    # never re-render until a full thread reload (refresh). Force the
-    # produceWithPatches path so setConversation runs the full subscriber walk.
-    (
-        "streaming: force full patch notifications for text deltas",
-        "app-initial-",
-        ",{knownHistoryInvalidation:r,knownChangedItems:a})}}}}));function Vun",
-        ",{})}}}}));function Vun",
-    ),
 ]
 
 

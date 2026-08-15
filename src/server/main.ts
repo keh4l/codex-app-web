@@ -715,38 +715,17 @@ async function startIpcBridgeServer(options: ServerOptions): Promise<void> {
     });
   });
 
-  const pendingBroadcasts: string[] = [];
-  const MAX_PENDING_BROADCASTS = 500;
-
   bridgeState.broadcastToRenderer = (message: MainToRendererMessage): void => {
     const payload = JSON.stringify(message);
-    let sent = false;
     for (const socket of sockets) {
       if (socket.readyState === WebSocket.OPEN) {
         socket.send(payload);
-        sent = true;
-      }
-    }
-    // During WS reconnect the socket set can be briefly empty; queue so turn
-    // deltas aren't dropped while the browser is reconnecting.
-    if (!sent) {
-      pendingBroadcasts.push(payload);
-      if (pendingBroadcasts.length > MAX_PENDING_BROADCASTS) {
-        pendingBroadcasts.splice(
-          0,
-          pendingBroadcasts.length - MAX_PENDING_BROADCASTS,
-        );
       }
     }
   };
 
   websocketServer.on("connection", (socket) => {
     sockets.add(socket);
-    if (pendingBroadcasts.length > 0 && socket.readyState === WebSocket.OPEN) {
-      for (const payload of pendingBroadcasts.splice(0)) {
-        socket.send(payload);
-      }
-    }
 
     // Native ws ping/pong to reap half-open dead connections server-side, so a
     // client that vanished without a TCP close doesn't linger in `sockets`.
