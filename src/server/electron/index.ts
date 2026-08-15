@@ -11,6 +11,10 @@ type StubWebContents = {
   };
   getURL: () => string;
   isDestroyed: () => boolean;
+  /** Chunked IPC queues while true; hosted webview is never "loading". */
+  isLoading: () => boolean;
+  /** Avatar-overlay path short-circuits some mcp-notifications when true. */
+  getBackgroundThrottling: () => boolean;
   off: (event: string, listener: StubListener) => unknown;
   on: (event: string, listener: StubListener) => unknown;
   once: (event: string, listener: StubListener) => unknown;
@@ -177,24 +181,67 @@ const rendererUrl = "http://localhost:5175/";
 const rendererMainFrame = {
   url: rendererUrl,
 };
+
+function broadcastWebContentsSend(
+  channel: string,
+  args: unknown[],
+  source: string,
+): void {
+  if (channel === "codex_desktop:message-for-view" && args.length > 0) {
+    const payload = args[0];
+    const type =
+      payload && typeof payload === "object" && "type" in payload
+        ? String((payload as { type?: unknown }).type)
+        : typeof payload;
+    const method =
+      payload && typeof payload === "object" && "method" in payload
+        ? String((payload as { method?: unknown }).method)
+        : undefined;
+    console.log(
+      `[codex-web] message-for-view from=${source} type=${type}` +
+        (method ? ` method=${method}` : ""),
+    );
+  }
+  getIpcMainBridgeState().broadcastToRenderer?.({
+    type: "ipc-main-event",
+    channel,
+    args,
+  });
+}
+
 const rendererWebContentsEmitter = createEmitterStub("ipcMainEvent.sender");
 const rendererWebContents: StubWebContents = {
   id: 1001,
   mainFrame: rendererMainFrame,
   getURL: () => rendererMainFrame.url,
   isDestroyed: () => false,
+  isLoading: () => false,
+  getBackgroundThrottling: () => false,
   off: rendererWebContentsEmitter.off,
   on: rendererWebContentsEmitter.on,
   once: rendererWebContentsEmitter.once,
   removeListener: rendererWebContentsEmitter.removeListener,
   send: (channel: string, ...args: unknown[]): void => {
-    getIpcMainBridgeState().broadcastToRenderer?.({
-      type: "ipc-main-event",
-      channel,
-      args,
-    });
+    broadcastWebContentsSend(channel, args, "rendererWebContents");
   },
 };
+
+/**
+ * Chunked message ack looks up in-flight transfers by webContents object
+ * identity. IPC events must therefore use the same BrowserWindow.webContents
+ * instance that AppServerConnection registered — not a separate singleton.
+ */
+function resolveHostedWebContents(): StubWebContents {
+  const focused = BrowserWindow.focusedWindow;
+  if (focused && !focused.isDestroyed()) {
+    return focused.webContents as unknown as StubWebContents;
+  }
+  const first = BrowserWindow.getAllWindows()[0];
+  if (first) {
+    return first.webContents as unknown as StubWebContents;
+  }
+  return rendererWebContents;
+}
 
 // A MessagePortMain stand-in whose frames travel over the websocket bridge.
 // 26.608+ transfers a MessagePort via ipcRenderer.postMessage
@@ -275,13 +322,14 @@ function createBridgedMessagePort(portId: string): BridgedMessagePort {
 }
 
 function createIpcMainEvent(): IpcMainEvent {
+  const sender = resolveHostedWebContents();
   const event: IpcMainEvent = {
     returnValue: undefined,
     processId: 1,
     frameId: 1,
     ports: [],
-    sender: rendererWebContents,
-    senderFrame: rendererMainFrame,
+    sender,
+    senderFrame: sender.mainFrame,
     reply: (channel: string, ...args: unknown[]): void => {
       getIpcMainBridgeState().broadcastToRenderer?.({
         type: "ipc-main-event",
@@ -547,7 +595,9 @@ class BrowserWindow {
         ...webContentsEmitter,
         id: this.id * 1000 + 1,
         mainFrame: {
-          url: "",
+          // Match the hosted page origin so isTrustedIpcSender/UTe accepts
+          // chunked-message-ack and message-from-view from the browser.
+          url: rendererUrl,
         },
         getURL: (): string => {
           log(`BrowserWindow#${this.id}.webContents.getURL`, []);
@@ -557,6 +607,8 @@ class BrowserWindow {
           );
         },
         isDestroyed: (): boolean => this.destroyed,
+        isLoading: (): boolean => false,
+        getBackgroundThrottling: (): boolean => false,
         loadURL: async (url: string): Promise<void> => {
           log(`BrowserWindow#${this.id}.webContents.loadURL`, [url]);
           (this.webContents.mainFrame as { url: string }).url = url;
@@ -576,11 +628,11 @@ class BrowserWindow {
             return;
           }
           const [channel, ...args] = sendArgs as [string, ...unknown[]];
-          getIpcMainBridgeState().broadcastToRenderer?.({
-            type: "ipc-main-event",
+          broadcastWebContentsSend(
             channel,
             args,
-          });
+            `BrowserWindow#${this.id}`,
+          );
         },
       } as Record<string, unknown>,
       {
