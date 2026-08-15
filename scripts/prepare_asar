@@ -31,7 +31,7 @@ node -e '
   const fs = require("fs");
   const path = require("path");
   const packageJson = require("./scratch/asar/package.json");
-  if (packageJson.version !== "26.803.41515") {
+  if (packageJson.version !== "26.715.72359") {
     throw new Error(`unexpected ChatGPT app version: ${packageJson.version}`);
   }
   if (
@@ -80,17 +80,20 @@ if [[ -f patches/webview-preload.patch ]]; then apply_asar_patch patches/webview
 if [[ -f patches/webview-favicon.patch ]]; then apply_asar_patch patches/webview-favicon.patch; fi
 if [[ -f patches/webview-pwa.patch ]]; then apply_asar_patch patches/webview-pwa.patch; fi
 if [[ -f patches/webview-thread-title.patch ]]; then apply_asar_patch patches/webview-thread-title.patch; fi
+if [[ -f patches/webview-initial-route.patch ]]; then apply_asar_patch patches/webview-initial-route.patch; fi
 if [[ -f patches/webview-electron-shim-close-sidebar.patch ]]; then apply_asar_patch patches/webview-electron-shim-close-sidebar.patch; fi
 if [[ -f patches/webview-prosemirror-inputmode.patch ]]; then apply_asar_patch patches/webview-prosemirror-inputmode.patch; fi
 if [[ -f patches/webview-use-atfs-for-local-files.patch ]]; then apply_asar_patch patches/webview-use-atfs-for-local-files.patch; fi
-# prompt patch optional — re-enable after verified minified diffs
+# prompt/statsig patches temporarily optional — re-enable after verified minified diffs
 if [[ -f patches/webview-prompt-search-param.patch ]]; then
   apply_asar_patch patches/webview-prompt-search-param.patch
 fi
 if [[ -f patches/webview-app-host-services.patch ]]; then apply_asar_patch patches/webview-app-host-services.patch; fi
-# Minified app-initial lines are ~1MB; keep Statsig/Sentry/route fixes as
-# exact string replacements instead of multi-megabyte unified diffs.
-python3 "$(dirname "$0")/apply_webview_js_semantic_fixes.py"
+if [[ -f patches/webview-statsig-override-adapter.patch ]]; then
+  apply_asar_patch patches/webview-statsig-override-adapter.patch
+fi
+if [[ -f patches/sentry-disable-shell.patch ]]; then apply_asar_patch patches/sentry-disable-shell.patch; fi
+if [[ -f patches/sentry-disable-webview.patch ]]; then apply_asar_patch patches/sentry-disable-webview.patch; fi
 # applied last: its context is generated against the fully-patched index.html
 if [[ -f patches/webview-remove-csp.patch ]]; then apply_asar_patch patches/webview-remove-csp.patch; fi
 

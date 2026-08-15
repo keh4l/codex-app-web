@@ -9,7 +9,7 @@ fi
 TEMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TEMP_DIR"' EXIT
 
-APP_VERSION="26.803.41515"
+APP_VERSION="26.715.72359"
 APP_ARCHIVE_NAME="ChatGPT-darwin-arm64-$APP_VERSION.zip"
 curl --fail --location --retry 5 --retry-all-errors --retry-delay 1 \
   --output "$TEMP_DIR/file.zip" \

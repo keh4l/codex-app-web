@@ -1,7 +1,3 @@
-import fs from "node:fs";
-import os from "node:os";
-import path from "node:path";
-
 type StubFunction = (...args: unknown[]) => unknown;
 type StubListener = (...args: unknown[]) => void;
 type StubWebContents = {
@@ -934,107 +930,12 @@ async function patchReferralEligibility(
   }
 }
 
-// Ultra 滑块开关读写 ChatGPT `/settings/user` 与
-// `/settings/account_user_setting?feature=model_picker_persists_ultra_effort`。
-// 桌面端靠 Electron session 里的 chatgpt.com cookie；网页宿主走 Node fetch，
-// 没有这套 cookie，且该路径不走 Codex Bearer 推断，请求常 401/403，前端
-// `disabled: data == null` 导致开关永远点不了。上游失败时落到 CODEX_HOME 本地偏好。
-function codexHomeDir(): string {
-  return process.env.CODEX_HOME || path.join(os.homedir(), ".codex");
-}
-
-function ultraEffortPrefPath(): string {
-  return path.join(codexHomeDir(), "codex-web-ultra-effort.json");
-}
-
-function readLocalUltraEffortEnabled(): boolean {
-  try {
-    const raw = fs.readFileSync(ultraEffortPrefPath(), "utf8");
-    const parsed = JSON.parse(raw) as { enabled?: unknown };
-    return parsed.enabled === true;
-  } catch {
-    return false;
-  }
-}
-
-function writeLocalUltraEffortEnabled(enabled: boolean): void {
-  fs.mkdirSync(codexHomeDir(), { recursive: true });
-  fs.writeFileSync(
-    ultraEffortPrefPath(),
-    `${JSON.stringify({ enabled }, null, 2)}\n`,
-    "utf8",
-  );
-}
-
-function jsonResponse(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { "content-type": "application/json" },
-  });
-}
-
-function requestUrl(input: string | URL): URL | null {
-  try {
-    return new URL(
-      typeof input === "string" ? input : input.toString(),
-      "https://chatgpt.com",
-    );
-  } catch {
-    return null;
-  }
-}
-
-async function patchUltraEffortSettings(
-  input: string | URL,
-  init: RequestInit | undefined,
-  response: Response,
-): Promise<Response> {
-  const url = requestUrl(input);
-  if (url == null) {
-    return response;
-  }
-
-  const method = (init?.method ?? "GET").toUpperCase();
-  const pathname = url.pathname.replace(/\/+$/, "");
-
-  if (
-    method === "PATCH" &&
-    pathname.endsWith("/settings/account_user_setting") &&
-    url.searchParams.get("feature") === "model_picker_persists_ultra_effort"
-  ) {
-    if (response.ok) {
-      return response;
-    }
-    const raw = url.searchParams.get("value");
-    const enabled = raw === "true" || raw === "1";
-    writeLocalUltraEffortEnabled(enabled);
-    log("ultra-effort-local-write", [{ enabled, status: response.status }]);
-    return jsonResponse({});
-  }
-
-  if (method === "GET" && pathname.endsWith("/settings/user")) {
-    if (response.ok) {
-      return response;
-    }
-    const enabled = readLocalUltraEffortEnabled();
-    log("ultra-effort-local-read", [{ enabled, status: response.status }]);
-    return jsonResponse({
-      settings: {
-        model_picker_persists_ultra_effort: enabled,
-      },
-    });
-  }
-
-  return response;
-}
-
 const net = {
   async fetch(input: string | URL, init?: RequestInit): Promise<Response> {
     // log("net.fetch", [input, init]);
     if (typeof globalThis.fetch === "function") {
       const response = await globalThis.fetch(input as URL | RequestInfo, init);
-      const withReferral = await patchReferralEligibility(input, response);
-      return patchUltraEffortSettings(input, init, withReferral);
+      return patchReferralEligibility(input, response);
     }
     return new Response("", { status: 204 });
   },
@@ -1086,21 +987,7 @@ const nativeImage = {
     };
   },
 };
-const powerMonitor = {
-  ...createEmitterStub("powerMonitor"),
-  getSystemIdleState(_idleThresholdSeconds?: number): "active" | "idle" | "locked" | "unknown" {
-    log("powerMonitor.getSystemIdleState", [_idleThresholdSeconds]);
-    return "active";
-  },
-  getSystemIdleTime(): number {
-    log("powerMonitor.getSystemIdleTime", []);
-    return 0;
-  },
-  isOnBatteryPower(): boolean {
-    log("powerMonitor.isOnBatteryPower", []);
-    return false;
-  },
-};
+const powerMonitor = createEmitterStub("powerMonitor");
 const screen = {
   ...createEmitterStub("screen"),
   getAllDisplays(): Array<{

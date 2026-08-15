@@ -69,11 +69,6 @@ app-host services。MessagePort RPC、认证、心跳、i18n override 等本 for
 `scripts/prepare_asar` 的真实顺序逐个应用，并将结果与 modified 逐字节比较。任何 fuzz、
 reject、遗漏或意外 chunk 都要先修正。
 
-`app-initial-*.js` 里 Statsig / Sentry / memory-router 的改动落在超长单行上，
-统一 diff 会达到数 MB。这些语义改动维护在
-`scripts/apply_webview_js_semantic_fixes.py`（精确字符串替换，必须恰好命中一次）。
-升级时同步更新该脚本里的锚点，不要再为它们新增 `patches/*.patch`。
-
 ## 5. 从零重建
 
 不要把临时 modified 树复制进 `scratch/asar`。使用固定官方 ZIP 运行真实生成流程：

@@ -648,34 +648,26 @@ async function startIpcBridgeServer(options: ServerOptions): Promise<void> {
   }
   // index.html 绝不能强缓存：它引用带 hash 的 assets，部署后必须立刻拿到新版，
   // 否则会一直加载旧 hash 的资源。no-cache 让浏览器每次校验后再用。
-  // Clear-Site-Data 只挂在真正的入口 HTML（/、/index.html）上，用来清掉本源
-  // 下曾被 immutable 锁死的错误 chunk。SPA fallback 不能带这个头，否则客户端
-  // 路由每次导航都会反复清缓存，控制台刷屏。
-  const sendIndexHtml = (
-    reply: FastifyReply,
-    { clearSiteData = false }: { clearSiteData?: boolean } = {},
-  ) => {
-    if (injectedIndexHtml) {
-      reply.type("text/html; charset=utf-8").header("cache-control", "no-cache");
-      if (clearSiteData) {
-        reply.header("Clear-Site-Data", '"cache"');
-      }
-      return reply.send(injectedIndexHtml);
-    }
-
-    reply.header("cache-control", "no-cache");
-    if (clearSiteData) {
-      reply.header("Clear-Site-Data", '"cache"');
-    }
-    return reply.sendFile("index.html");
-  };
+  // Clear-Site-Data 清掉本源下曾被 immutable 锁死的错误 chunk（同 hash 打
+  // patch 后 Chrome 可能一年不重拉）。localhost 支持该头。
+  const sendIndexHtml = (reply: FastifyReply) =>
+    injectedIndexHtml
+      ? reply
+          .type("text/html; charset=utf-8")
+          .header("cache-control", "no-cache")
+          .header("Clear-Site-Data", '"cache"')
+          .send(injectedIndexHtml)
+      : reply
+          .header("cache-control", "no-cache")
+          .header("Clear-Site-Data", '"cache"')
+          .sendFile("index.html");
 
   app.get("/", async (_request, reply) => {
-    return sendIndexHtml(reply, { clearSiteData: true });
+    return sendIndexHtml(reply);
   });
 
   app.get("/index.html", async (_request, reply) => {
-    return sendIndexHtml(reply, { clearSiteData: true });
+    return sendIndexHtml(reply);
   });
 
   app.setNotFoundHandler((request, reply) => {

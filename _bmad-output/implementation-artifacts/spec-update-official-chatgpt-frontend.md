@@ -63,8 +63,6 @@ context:
 
 ## Spec Change Log
 
-- 2026-08-14: 再升至官方 `26.803.41515`，配套 CLI `0.147.0-alpha.6.5`；按新 `index.html` 重生 HTML 侧补丁，JS minified patches 仍暂缺。
-
 ## Design Notes
 
 官方 ZIP 与本机安装的外层名称是 ChatGPT，但 Bundle ID 仍是 `com.openai.codex`，asar 内的 productName/title/IPC 仍是 Codex。archive/bundle 名应独立于内部协议；不要盲目复用上游把浏览器 `process.versions.electron` 设为非空的改动。
