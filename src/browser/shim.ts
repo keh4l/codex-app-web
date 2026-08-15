@@ -542,30 +542,35 @@ if (initialRoute.browserPath) {
 
 electronShim.initialSidebarState = initialSidebarState;
 electronShim.onMemoryNavigationChanged = (navigation) => {
-  const path = navigation.location.pathname;
-  if (
-    navigation.action !== "POP" &&
-    mobileMediaQuery.matches &&
-    shouldCloseSidebarForMemoryPath(path)
-  ) {
-    electronShim.closeSidebar?.();
-  }
+  try {
+    const path = navigation.location.pathname;
+    if (
+      navigation.action !== "POP" &&
+      mobileMediaQuery.matches &&
+      shouldCloseSidebarForMemoryPath(path)
+    ) {
+      electronShim.closeSidebar?.();
+    }
 
-  const browserPath = mapMemoryPathToBrowserPath(path);
-  if (browserPath == null) {
-    return;
-  }
+    const browserPath = mapMemoryPathToBrowserPath(path);
+    if (browserPath == null) {
+      return;
+    }
 
-  if (browserPath.titleChange) {
-    document.title = browserPath.titleChange;
-  }
+    if (browserPath.titleChange) {
+      document.title = browserPath.titleChange;
+    }
 
-  if (window.location.pathname === browserPath.path) {
-    window.history.replaceState(undefined, "", browserPath.path);
-    return;
-  }
+    if (window.location.pathname === browserPath.path) {
+      window.history.replaceState(undefined, "", browserPath.path);
+      return;
+    }
 
-  window.history.pushState(undefined, "", browserPath.path);
+    window.history.pushState(undefined, "", browserPath.path);
+  } catch (error) {
+    // Never let URL sync break the memory router's React state update.
+    console.warn("[electron-shim] onMemoryNavigationChanged failed", error);
+  }
 };
 
 const buildFlavor: "prod" | "dev" | "agent" | string = "prod";

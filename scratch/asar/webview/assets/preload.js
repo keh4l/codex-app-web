@@ -13173,16 +13173,20 @@ var init_shim = __esmMin((() => {
 	if (initialRoute.browserPath) window.history.pushState(void 0, "", initialRoute.browserPath);
 	electronShim.initialSidebarState = initialSidebarState;
 	electronShim.onMemoryNavigationChanged = (navigation) => {
-		const path = navigation.location.pathname;
-		if (navigation.action !== "POP" && mobileMediaQuery.matches && shouldCloseSidebarForMemoryPath(path)) electronShim.closeSidebar?.();
-		const browserPath = mapMemoryPathToBrowserPath(path);
-		if (browserPath == null) return;
-		if (browserPath.titleChange) document.title = browserPath.titleChange;
-		if (window.location.pathname === browserPath.path) {
-			window.history.replaceState(void 0, "", browserPath.path);
-			return;
+		try {
+			const path = navigation.location.pathname;
+			if (navigation.action !== "POP" && mobileMediaQuery.matches && shouldCloseSidebarForMemoryPath(path)) electronShim.closeSidebar?.();
+			const browserPath = mapMemoryPathToBrowserPath(path);
+			if (browserPath == null) return;
+			if (browserPath.titleChange) document.title = browserPath.titleChange;
+			if (window.location.pathname === browserPath.path) {
+				window.history.replaceState(void 0, "", browserPath.path);
+				return;
+			}
+			window.history.pushState(void 0, "", browserPath.path);
+		} catch (error) {
+			console.warn("[electron-shim] onMemoryNavigationChanged failed", error);
 		}
-		window.history.pushState(void 0, "", browserPath.path);
 	};
 	buildFlavor = "prod";
 	ipcRenderer = {
