@@ -891,22 +891,6 @@ const dialog = {
     log("dialog.showMessageBox", args);
     return { response: 0 };
   },
-  showMessageBoxSync(...args: unknown[]): number {
-    log("dialog.showMessageBoxSync", args);
-    return 0;
-  },
-  showErrorBox(title: unknown, content: unknown): void {
-    // 26.803+ shows a modal when app-server init fails; hosted has no GUI.
-    console.error(`[electron-main-stub] dialog.showErrorBox: ${String(title)} — ${String(content)}`);
-  },
-  async showOpenDialog(...args: unknown[]): Promise<{ canceled: boolean; filePaths: string[] }> {
-    log("dialog.showOpenDialog", args);
-    return { canceled: true, filePaths: [] };
-  },
-  async showSaveDialog(...args: unknown[]): Promise<{ canceled: boolean; filePath?: string }> {
-    log("dialog.showSaveDialog", args);
-    return { canceled: true };
-  },
 };
 
 const crashReporter = {
@@ -1045,12 +1029,6 @@ async function patchUltraEffortSettings(
 }
 
 const net = {
-  // 26.803+ AppServerConnection.completeInitialization → startNetworkConnectivityTimer
-  // calls electron.net.isOnline(). Without this stub the handshake throws and the
-  // UI never receives live turn/item notifications (refresh still loads from disk).
-  isOnline(): boolean {
-    return true;
-  },
   async fetch(input: string | URL, init?: RequestInit): Promise<Response> {
     // log("net.fetch", [input, init]);
     if (typeof globalThis.fetch === "function") {
