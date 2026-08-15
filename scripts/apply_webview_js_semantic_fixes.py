@@ -40,16 +40,15 @@ FIXES: list[tuple[str, str, str, str]] = [
     ),
     # Hosted single-window: canBroadcastPatchesToFollowers is false, so
     # applyFrameTextDeltas took the knownChangedItems short-circuit. That path
-    # only pokes item:${entityKey} listeners; timeline subscriptions often miss
-    # those keys, so agentMessage/reasoning deltas mutate state but never
-    # re-render until refresh. Pass knownHistoryInvalidation fullReset (and no
-    # knownChangedItems) so the !canBroadcast path runs notifyReplacedTurnItems
-    # for every item subscriber.
+    # only pokes item:${entityKey} listeners; the timeline often subscribes as
+    # item:turn:${turnId}, so agentMessage/reasoning deltas mutate state but
+    # never re-render until a full thread reload (refresh). Force the
+    # produceWithPatches path so setConversation runs the full subscriber walk.
     (
-        "streaming: force fullReset notifications for text deltas",
+        "streaming: force full patch notifications for text deltas",
         "app-initial-",
         ",{knownHistoryInvalidation:r,knownChangedItems:a})}}}}));function Vun",
-        ",{knownHistoryInvalidation:{type:`fullReset`}})}}}}));function Vun",
+        ",{})}}}}));function Vun",
     ),
 ]
 
